@@ -4,35 +4,50 @@
  *
  * This override modifies the minimum order amount check to use
  * tax-included prices instead of tax-excluded prices.
+ *
+ * Compatible with PrestaShop 1.7.x
  */
+
+if (!defined('_PS_VERSION_')) {
+    exit;
+}
 
 class Cart extends CartCore
 {
     /**
-     * Check if minimum order amount is reached
+     * Check if the cart reaches the minimum purchase amount
      * Modified to use tax-included prices when the module setting is enabled
      *
-     * @return bool
+     * @return bool|array True if minimum is reached, array with error details otherwise
      */
-    public function isMinimalPurchaseReached()
+    public function checkMinimalPurchase()
     {
         // Check if our module is active and configured to use tax included
         if (Module::isEnabled('minordertaxincluded') && Configuration::get('MINORDER_USE_TAX_INCL')) {
             $minimalPurchase = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
 
+            // If module min order is 0 or disabled, check PrestaShop default
             if ($minimalPurchase <= 0) {
-                // If module min order is 0 or disabled, fall back to PrestaShop default
-                return parent::isMinimalPurchaseReached();
+                $minimalPurchase = (float) Configuration::get('PS_PURCHASE_MINIMUM');
             }
 
-            // Get cart total with tax included (products only)
-            $cartTotal = (float) $this->getOrderTotal(true, Cart::ONLY_PRODUCTS);
+            if ($minimalPurchase > 0) {
+                // Get cart total with tax included (products only)
+                $cartTotal = (float) $this->getOrderTotal(true, Cart::ONLY_PRODUCTS);
 
-            return $cartTotal >= $minimalPurchase;
+                if ($cartTotal < $minimalPurchase) {
+                    return [
+                        'minimum' => Tools::displayPrice($minimalPurchase, Currency::getCurrencyInstance((int) $this->id_currency)),
+                        'total' => Tools::displayPrice($cartTotal, Currency::getCurrencyInstance((int) $this->id_currency)),
+                    ];
+                }
+            }
+
+            return true;
         }
 
         // Fall back to default PrestaShop behavior
-        return parent::isMinimalPurchaseReached();
+        return parent::checkMinimalPurchase();
     }
 
     /**

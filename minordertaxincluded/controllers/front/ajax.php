@@ -13,6 +13,20 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
     public $ajax = true;
 
     /**
+     * @var bool Disable SSL requirement for AJAX
+     */
+    public $ssl = true;
+
+    /**
+     * Initialize controller
+     */
+    public function init()
+    {
+        parent::init();
+        header('Content-Type: application/json; charset=utf-8');
+    }
+
+    /**
      * Process AJAX request
      */
     public function postProcess()
@@ -25,7 +39,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 break;
 
             default:
-                $this->ajaxDie(json_encode([
+                $this->ajaxRender(json_encode([
                     'success' => false,
                     'error' => 'Invalid action',
                 ]));
@@ -43,13 +57,14 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $cart = $this->context->cart;
 
         if (!Validate::isLoadedObject($cart)) {
-            $this->ajaxDie(json_encode([
+            $this->ajaxRender(json_encode([
                 'success' => true,
                 'cart_total' => 0,
                 'remaining' => $freeShippingAmount,
                 'percentage' => 0,
                 'free_shipping_reached' => false,
             ]));
+            return;
         }
 
         // Get cart total (products only) with or without tax
@@ -57,7 +72,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $remaining = max(0, $freeShippingAmount - $cartTotal);
         $percentage = $freeShippingAmount > 0 ? min(100, ($cartTotal / $freeShippingAmount) * 100) : 0;
 
-        $this->ajaxDie(json_encode([
+        $this->ajaxRender(json_encode([
             'success' => true,
             'cart_total' => round($cartTotal, 2),
             'remaining' => round($remaining, 2),

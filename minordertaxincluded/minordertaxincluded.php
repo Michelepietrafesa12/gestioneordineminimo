@@ -39,6 +39,7 @@ class MinOrderTaxIncluded extends Module
     public function install()
     {
         return parent::install()
+            && $this->installOverrides()
             && $this->registerHook('displayShoppingCart')
             && $this->registerHook('displayShoppingCartFooter')
             && $this->registerHook('actionCartSave')
@@ -56,7 +57,8 @@ class MinOrderTaxIncluded extends Module
      */
     public function uninstall()
     {
-        return parent::uninstall()
+        return $this->uninstallOverrides()
+            && parent::uninstall()
             && Configuration::deleteByName('MINORDER_FREE_SHIPPING_AMOUNT')
             && Configuration::deleteByName('MINORDER_MIN_ORDER_AMOUNT')
             && Configuration::deleteByName('MINORDER_SHOW_PROGRESS_BAR')
@@ -200,7 +202,7 @@ class MinOrderTaxIncluded extends Module
     public function hookDisplayHeader()
     {
         if (!Configuration::get('MINORDER_SHOW_PROGRESS_BAR')) {
-            return;
+            return '';
         }
 
         $this->context->controller->addCSS($this->_path . 'views/css/minordertaxincluded.css');
@@ -211,8 +213,9 @@ class MinOrderTaxIncluded extends Module
             'minorder_ajax_url' => $this->context->link->getModuleLink($this->name, 'ajax'),
             'minorder_free_shipping' => (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT'),
             'minorder_currency_sign' => $this->context->currency->sign,
-            'minorder_currency_format' => $this->context->currency->format,
         ]);
+
+        return '';
     }
 
     /**

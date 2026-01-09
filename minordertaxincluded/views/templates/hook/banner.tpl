@@ -1,4 +1,4 @@
-{**
+{*
  * Banner template for free shipping notification
  *
  * Variables available:

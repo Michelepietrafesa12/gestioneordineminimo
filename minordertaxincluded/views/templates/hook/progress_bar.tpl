@@ -1,4 +1,4 @@
-{**
+{*
  * Progress bar template for free shipping
  *
  * Variables available:
