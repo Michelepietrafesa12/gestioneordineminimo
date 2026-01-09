@@ -1,0 +1,241 @@
+/**
+ * Min Order Tax Included - Styles
+ */
+
+/* Progress Container */
+.minorder-progress-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 15px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid #dee2e6;
+}
+
+/* Success State */
+.minorder-success {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #28a745;
+    font-size: 16px;
+    font-weight: 600;
+    padding: 10px;
+    background-color: #d4edda;
+    border-radius: 6px;
+    border: 1px solid #c3e6cb;
+}
+
+.minorder-success i {
+    margin-right: 10px;
+    font-size: 24px;
+}
+
+/* Info Message */
+.minorder-info {
+    margin-bottom: 15px;
+}
+
+.minorder-message {
+    display: flex;
+    align-items: center;
+    color: #495057;
+    font-size: 15px;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.minorder-message i {
+    color: #ffc107;
+    margin-right: 10px;
+    font-size: 22px;
+}
+
+.minorder-remaining-amount {
+    color: #dc3545;
+    font-size: 17px;
+    margin: 0 5px;
+}
+
+/* Progress Bar Wrapper */
+.minorder-progress-bar-wrapper {
+    margin-top: 10px;
+}
+
+/* Progress Bar */
+.minorder-progress-bar {
+    background-color: #e9ecef;
+    border-radius: 20px;
+    height: 24px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.minorder-progress-fill {
+    background: linear-gradient(90deg, #28a745 0%, #20c997 50%, #17a2b8 100%);
+    height: 100%;
+    border-radius: 20px;
+    transition: width 0.5s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 40px;
+    position: relative;
+    overflow: hidden;
+}
+
+.minorder-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.2) 50%,
+        transparent 100%
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.minorder-progress-text {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding-right: 10px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 1;
+}
+
+/* Progress Labels */
+.minorder-progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.minorder-current {
+    font-weight: 600;
+    color: #495057;
+}
+
+.minorder-target {
+    font-weight: 600;
+    color: #28a745;
+}
+
+/* Banner Styles */
+.minorder-banner {
+    background: linear-gradient(90deg, #ffc107 0%, #ffca2c 100%);
+    color: #212529;
+    padding: 12px 20px;
+    text-align: center;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.minorder-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.minorder-banner i {
+    font-size: 20px;
+}
+
+.minorder-banner strong {
+    color: #dc3545;
+    font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .minorder-progress-container {
+        padding: 15px;
+        margin: 10px 0;
+    }
+
+    .minorder-message {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .minorder-message i {
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+
+    .minorder-success {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .minorder-success i {
+        margin-right: 0;
+        margin-bottom: 8px;
+    }
+
+    .minorder-banner {
+        padding: 10px 15px;
+    }
+
+    .minorder-banner-content {
+        font-size: 13px;
+    }
+}
+
+/* Animation for updates */
+.minorder-progress-container.updating {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.minorder-progress-container.updated {
+    animation: highlight 0.5s ease-out;
+}
+
+@keyframes highlight {
+    0% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+    }
+    100% {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+}
+
+/* Icon fallback for themes without Material Icons */
+.minorder-progress-container i.material-icons,
+.minorder-banner i.material-icons {
+    font-family: 'Material Icons', sans-serif;
+    font-weight: normal;
+    font-style: normal;
+    display: inline-block;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+}
