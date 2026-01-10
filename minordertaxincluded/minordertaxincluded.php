@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.11.0';
+        $this->version = '1.12.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -64,7 +64,8 @@ class MinOrderTaxIncluded extends Module
             && Configuration::updateValue('MINORDER_COLOR_PRICE_OLD', '#999999')
             && Configuration::updateValue('MINORDER_COLOR_TEXT', '#333333')
             && Configuration::updateValue('MINORDER_COLOR_CARD_BG', '#ffffff')
-            && Configuration::updateValue('MINORDER_COLOR_CARD_BORDER', '#eeeeee');
+            && Configuration::updateValue('MINORDER_COLOR_CARD_BORDER', '#eeeeee')
+            && Configuration::updateValue('MINORDER_COLOR_BUTTON_TEXT', '#ffffff');
     }
 
     /**
@@ -89,7 +90,8 @@ class MinOrderTaxIncluded extends Module
             && Configuration::deleteByName('MINORDER_COLOR_PRICE_OLD')
             && Configuration::deleteByName('MINORDER_COLOR_TEXT')
             && Configuration::deleteByName('MINORDER_COLOR_CARD_BG')
-            && Configuration::deleteByName('MINORDER_COLOR_CARD_BORDER');
+            && Configuration::deleteByName('MINORDER_COLOR_CARD_BORDER')
+            && Configuration::deleteByName('MINORDER_COLOR_BUTTON_TEXT');
     }
 
     /**
@@ -130,6 +132,7 @@ class MinOrderTaxIncluded extends Module
             $colorText = Tools::getValue('MINORDER_COLOR_TEXT', '#333333');
             $colorCardBg = Tools::getValue('MINORDER_COLOR_CARD_BG', '#ffffff');
             $colorCardBorder = Tools::getValue('MINORDER_COLOR_CARD_BORDER', '#eeeeee');
+            $colorButtonText = Tools::getValue('MINORDER_COLOR_BUTTON_TEXT', '#ffffff');
 
             Configuration::updateValue('MINORDER_COLOR_PRIMARY', $colorPrimary);
             Configuration::updateValue('MINORDER_COLOR_SECONDARY', $colorSecondary);
@@ -141,6 +144,7 @@ class MinOrderTaxIncluded extends Module
             Configuration::updateValue('MINORDER_COLOR_TEXT', $colorText);
             Configuration::updateValue('MINORDER_COLOR_CARD_BG', $colorCardBg);
             Configuration::updateValue('MINORDER_COLOR_CARD_BORDER', $colorCardBorder);
+            Configuration::updateValue('MINORDER_COLOR_BUTTON_TEXT', $colorButtonText);
 
             $output .= $this->displayConfirmation($this->l('Colori salvati con successo.'));
         }
@@ -317,6 +321,13 @@ class MinOrderTaxIncluded extends Module
                     ],
                     [
                         'type' => 'color',
+                        'label' => $this->l('Colore testo pulsante'),
+                        'name' => 'MINORDER_COLOR_BUTTON_TEXT',
+                        'desc' => $this->l('Colore del testo nel pulsante "Aggiungi". Default: #ffffff (bianco)'),
+                        'class' => 'mColorPicker',
+                    ],
+                    [
+                        'type' => 'color',
                         'label' => $this->l('Colore badge Bestseller'),
                         'name' => 'MINORDER_COLOR_BESTSELLER',
                         'desc' => $this->l('Colore del badge "Più acquistato". Default: #dc3545 (rosso)'),
@@ -409,6 +420,7 @@ class MinOrderTaxIncluded extends Module
             'MINORDER_COLOR_TEXT' => Configuration::get('MINORDER_COLOR_TEXT') ?: '#333333',
             'MINORDER_COLOR_CARD_BG' => Configuration::get('MINORDER_COLOR_CARD_BG') ?: '#ffffff',
             'MINORDER_COLOR_CARD_BORDER' => Configuration::get('MINORDER_COLOR_CARD_BORDER') ?: '#eeeeee',
+            'MINORDER_COLOR_BUTTON_TEXT' => Configuration::get('MINORDER_COLOR_BUTTON_TEXT') ?: '#ffffff',
         ];
     }
 
@@ -443,6 +455,7 @@ class MinOrderTaxIncluded extends Module
         $colorWarning = Configuration::get('MINORDER_COLOR_WARNING') ?: '#ffc107';
         $colorProgressBg = Configuration::get('MINORDER_COLOR_PROGRESS_BG') ?: '#e9ecef';
         $colorButton = Configuration::get('MINORDER_COLOR_BUTTON') ?: '#28a745';
+        $colorButtonText = Configuration::get('MINORDER_COLOR_BUTTON_TEXT') ?: '#ffffff';
         $colorBestseller = Configuration::get('MINORDER_COLOR_BESTSELLER') ?: '#dc3545';
         $colorPriceOld = Configuration::get('MINORDER_COLOR_PRICE_OLD') ?: '#999999';
         $colorText = Configuration::get('MINORDER_COLOR_TEXT') ?: '#333333';
@@ -471,6 +484,7 @@ class MinOrderTaxIncluded extends Module
             --minorder-text: {$colorText};
             --minorder-card-bg: {$colorCardBg};
             --minorder-card-border: {$colorCardBorder};
+            --minorder-button-text: {$colorButtonText};
         }
 
         .minorder-success {
@@ -502,6 +516,11 @@ class MinOrderTaxIncluded extends Module
 
         .minorder-add-btn {
             background: linear-gradient(135deg, {$colorButton} 0%, {$colorButtonHover} 100%) !important;
+            color: {$colorButtonText} !important;
+        }
+        .minorder-add-btn .minorder-icon,
+        .minorder-add-btn .minorder-add-text {
+            color: {$colorButtonText} !important;
         }
         .minorder-add-btn:hover {
             background: linear-gradient(135deg, {$colorButtonHover} 0%, {$colorButton} 100%) !important;
