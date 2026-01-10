@@ -286,3 +286,59 @@
     content: ' (Ordine minimo non raggiunto)';
     font-size: 11px;
 }
+
+/* Compact version for modals */
+.minorder-compact {
+    padding: 12px;
+    margin: 10px 0;
+}
+
+.minorder-compact .minorder-info {
+    margin-bottom: 8px;
+}
+
+.minorder-compact .minorder-message {
+    font-size: 13px;
+}
+
+.minorder-compact .minorder-progress-bar {
+    height: 18px;
+}
+
+.minorder-compact .minorder-progress-text {
+    font-size: 10px;
+}
+
+.minorder-compact .minorder-progress-labels {
+    font-size: 11px;
+    margin-top: 5px;
+}
+
+.minorder-compact .minorder-success {
+    padding: 8px;
+    font-size: 13px;
+}
+
+/* Modal specific styling */
+.minorder-modal-progress {
+    margin: 10px 0;
+}
+
+.minorder-modal-progress .minorder-progress-container {
+    margin: 0;
+}
+
+/* Icon styling */
+.minorder-icon {
+    display: inline-block;
+    margin-right: 8px;
+    font-size: 18px;
+}
+
+.minorder-icon-warning {
+    color: #ffc107;
+}
+
+.minorder-success .minorder-icon {
+    color: #28a745;
+}

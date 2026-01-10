@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.2.0';
+        $this->version = '1.3.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -217,55 +217,50 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Display progress bar and minimum order warning in shopping cart
+     * Display progress bar in shopping cart page (main content area only)
      */
     public function hookDisplayShoppingCartFooter($params)
     {
-        $output = '';
-        $cartTotal = $this->getCartTotalTaxIncluded();
-
-        // Show minimum order warning if not reached
-        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
-        if ($minOrderAmount > 0 && $cartTotal < $minOrderAmount) {
-            $this->context->smarty->assign([
-                'min_order_amount' => $minOrderAmount,
-                'cart_total' => $cartTotal,
-                'remaining_amount' => $minOrderAmount - $cartTotal,
-                'currency_sign' => $this->context->currency->sign,
-            ]);
-            $output .= $this->display(__FILE__, 'views/templates/hook/minimum_order_warning.tpl');
-        }
-
-        // Show free shipping progress bar
-        if (Configuration::get('MINORDER_SHOW_PROGRESS_BAR')) {
-            $freeShippingAmount = (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT');
-
-            if ($freeShippingAmount > 0) {
-                $remaining = $freeShippingAmount - $cartTotal;
-                $percentage = min(100, ($cartTotal / $freeShippingAmount) * 100);
-
-                $this->context->smarty->assign([
-                    'free_shipping_amount' => $freeShippingAmount,
-                    'cart_total' => $cartTotal,
-                    'remaining_amount' => max(0, $remaining),
-                    'progress_percentage' => $percentage,
-                    'free_shipping_reached' => $remaining <= 0,
-                    'currency_sign' => $this->context->currency->sign,
-                ]);
-
-                $output .= $this->display(__FILE__, 'views/templates/hook/progress_bar.tpl');
-            }
-        }
-
-        return $output;
+        // Show unified progress bar for minimum order
+        return $this->renderMinOrderProgressBar();
     }
 
     /**
-     * Display progress bar also in displayShoppingCart hook
+     * Display progress bar in displayShoppingCart hook
+     * Return empty to avoid duplicates - we only show in footer
      */
     public function hookDisplayShoppingCart($params)
     {
-        return $this->hookDisplayShoppingCartFooter($params);
+        // Return empty to avoid duplicate display
+        return '';
+    }
+
+    /**
+     * Render the unified progress bar for minimum order
+     */
+    protected function renderMinOrderProgressBar()
+    {
+        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+
+        if ($minOrderAmount <= 0) {
+            return '';
+        }
+
+        $cartTotal = $this->getCartTotalTaxIncluded();
+        $remaining = max(0, $minOrderAmount - $cartTotal);
+        $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
+        $minOrderReached = $cartTotal >= $minOrderAmount;
+
+        $this->context->smarty->assign([
+            'min_order_amount' => $minOrderAmount,
+            'cart_total' => $cartTotal,
+            'remaining_amount' => $remaining,
+            'progress_percentage' => $percentage,
+            'min_order_reached' => $minOrderReached,
+            'currency_sign' => $this->context->currency->sign,
+        ]);
+
+        return $this->display(__FILE__, 'views/templates/hook/min_order_progress.tpl');
     }
 
     /**
@@ -340,24 +335,12 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Display warning in checkout subtotal
+     * Display warning in checkout subtotal - disabled to avoid duplicates
+     * The redirect in hookActionFrontControllerSetMedia handles checkout blocking
      */
     public function hookDisplayCheckoutSubtotalDetails($params)
     {
-        if (!$this->isMinimumOrderReached()) {
-            $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
-            $cartTotal = $this->getCartTotalTaxIncluded();
-
-            $this->context->smarty->assign([
-                'min_order_amount' => $minOrderAmount,
-                'cart_total' => $cartTotal,
-                'remaining_amount' => $minOrderAmount - $cartTotal,
-                'currency_sign' => $this->context->currency->sign,
-            ]);
-
-            return $this->display(__FILE__, 'views/templates/hook/minimum_order_warning.tpl');
-        }
-
+        // Return empty - checkout is blocked by redirect, no need for duplicate warnings
         return '';
     }
 
