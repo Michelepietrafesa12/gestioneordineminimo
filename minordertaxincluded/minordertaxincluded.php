@@ -973,7 +973,7 @@ class MinOrderTaxIncluded extends Module
                 $imageUrl = $this->context->link->getImageLink(
                     $product->link_rewrite,
                     $cover['id_image'],
-                    ImageType::getFormattedName('small')
+                    ImageType::getFormattedName('home')
                 );
             }
 
