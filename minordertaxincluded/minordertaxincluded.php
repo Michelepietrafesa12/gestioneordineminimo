@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.3.0';
+        $this->version = '1.4.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -44,9 +44,10 @@ class MinOrderTaxIncluded extends Module
             && $this->registerHook('actionCartSave')
             && $this->registerHook('displayHeader')
             && $this->registerHook('displayBanner')
-            && $this->registerHook('actionValidateOrder')
             && $this->registerHook('actionFrontControllerSetMedia')
             && $this->registerHook('displayCheckoutSubtotalDetails')
+            && $this->registerHook('displayPaymentTop')
+            && $this->registerHook('actionCarrierProcess')
             && Configuration::updateValue('MINORDER_FREE_SHIPPING_AMOUNT', 50)
             && Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', 0)
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
@@ -345,13 +346,38 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Validate order - check minimum amount with tax included
-     * This is a last line of defense
+     * Display warning before payment methods if minimum not reached
+     * This is shown if user somehow reaches the payment step
      */
-    public function hookActionValidateOrder($params)
+    public function hookDisplayPaymentTop($params)
     {
         if (!$this->isMinimumOrderReached()) {
-            throw new PrestaShopException($this->l('Ordine minimo non raggiunto. Impossibile completare l\'ordine.'));
+            $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+            $cartTotal = $this->getCartTotalTaxIncluded();
+            $remaining = $minOrderAmount - $cartTotal;
+
+            $this->context->smarty->assign([
+                'min_order_amount' => $minOrderAmount,
+                'cart_total' => $cartTotal,
+                'remaining_amount' => $remaining,
+                'currency_sign' => $this->context->currency->sign,
+                'cart_url' => $this->context->link->getPageLink('cart', true, null, ['action' => 'show']),
+            ]);
+
+            return $this->display(__FILE__, 'views/templates/hook/payment_block.tpl');
+        }
+
+        return '';
+    }
+
+    /**
+     * Block carrier selection if minimum order not reached
+     */
+    public function hookActionCarrierProcess($params)
+    {
+        if (!$this->isMinimumOrderReached()) {
+            // Redirect back to cart
+            Tools::redirect($this->context->link->getPageLink('cart', true, null, ['action' => 'show']));
         }
     }
 
