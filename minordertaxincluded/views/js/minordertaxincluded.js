@@ -487,6 +487,92 @@
          */
         formatCurrency: function(value) {
             return value.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.') + this.currencySign;
+        },
+
+        /**
+         * Bind suggested products add to cart forms
+         */
+        bindSuggestedProductsForms: function() {
+            var self = this;
+            document.addEventListener('submit', function(e) {
+                var form = e.target;
+                if (form.classList.contains('minorder-add-to-cart-form')) {
+                    e.preventDefault();
+                    self.handleAddToCart(form);
+                }
+            });
+        },
+
+        /**
+         * Handle add to cart via AJAX
+         */
+        handleAddToCart: function(form) {
+            var self = this;
+            var item = form.closest('.minorder-suggested-item');
+            var btn = form.querySelector('.minorder-add-btn');
+            var originalBtnHtml = btn.innerHTML;
+
+            // Add loading state
+            item.classList.add('loading');
+            btn.innerHTML = '<span class="minorder-spinner"></span>';
+            btn.disabled = true;
+
+            // Get form data
+            var formData = new FormData(form);
+            formData.append('ajax', '1');
+            formData.append('action', 'update');
+
+            // Send AJAX request
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', form.action, true);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            xhr.onload = function() {
+                // Remove loading state
+                item.classList.remove('loading');
+                btn.disabled = false;
+
+                if (xhr.status === 200) {
+                    // Success - show checkmark briefly
+                    btn.innerHTML = '<span class="minorder-icon">&#10003;</span>';
+                    btn.style.background = '#28a745';
+
+                    // Trigger PrestaShop cart update event
+                    if (typeof prestashop !== 'undefined') {
+                        prestashop.emit('updateCart', {
+                            reason: {
+                                idProduct: formData.get('id_product'),
+                                idProductAttribute: 0,
+                                linkAction: 'add-to-cart'
+                            }
+                        });
+                    }
+
+                    // Reload page after delay to update cart
+                    setTimeout(function() {
+                        btn.innerHTML = originalBtnHtml;
+                        btn.style.background = '';
+                        // Reload progress section
+                        self.reloadProgressSection();
+                    }, 800);
+                } else {
+                    // Error
+                    btn.innerHTML = '<span class="minorder-icon">&#10007;</span>';
+                    btn.style.background = '#dc3545';
+                    setTimeout(function() {
+                        btn.innerHTML = originalBtnHtml;
+                        btn.style.background = '';
+                    }, 1500);
+                }
+            };
+
+            xhr.onerror = function() {
+                item.classList.remove('loading');
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+            };
+
+            xhr.send(formData);
         }
     };
 
@@ -494,9 +580,11 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function() {
             MinOrderProgress.init();
+            MinOrderProgress.bindSuggestedProductsForms();
         });
     } else {
         MinOrderProgress.init();
+        MinOrderProgress.bindSuggestedProductsForms();
     }
 
     // Make available globally for debugging
