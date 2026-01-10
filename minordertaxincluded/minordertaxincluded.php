@@ -535,6 +535,9 @@ class MinOrderTaxIncluded extends Module
             background: {$colorCardBg} !important;
             border-color: {$colorCardBorder} !important;
         }
+        .minorder-suggested-image {
+            background: {$colorCardBg} !important;
+        }
         .minorder-suggested-item:hover {
             border-color: {$colorCardBorderHover} !important;
         }
