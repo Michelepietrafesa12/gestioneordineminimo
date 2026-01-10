@@ -38,6 +38,9 @@ class MinOrderTaxIncluded extends Module
      */
     public function install()
     {
+        // Clean up any existing overrides from previous installations
+        $this->cleanupExistingOverrides();
+
         return parent::install()
             && $this->installOverrides()
             && $this->registerHook('displayShoppingCart')
@@ -50,6 +53,26 @@ class MinOrderTaxIncluded extends Module
             && Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', 0)
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
             && Configuration::updateValue('MINORDER_USE_TAX_INCL', 1);
+    }
+
+    /**
+     * Clean up existing overrides from previous installations
+     * This handles the case where the module was previously installed
+     * and the override still exists in the system
+     */
+    private function cleanupExistingOverrides()
+    {
+        try {
+            // Try to uninstall any existing overrides from this module
+            $this->uninstallOverrides();
+        } catch (Exception $e) {
+            // Ignore errors during cleanup - the override might not exist
+        }
+
+        // Clear the class cache to ensure PrestaShop reloads classes
+        if (file_exists(_PS_CACHE_DIR_ . 'class_index.php')) {
+            @unlink(_PS_CACHE_DIR_ . 'class_index.php');
+        }
     }
 
     /**
