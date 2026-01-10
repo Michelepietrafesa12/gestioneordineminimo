@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.1.0';
+        $this->version = '1.2.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -45,6 +45,8 @@ class MinOrderTaxIncluded extends Module
             && $this->registerHook('displayHeader')
             && $this->registerHook('displayBanner')
             && $this->registerHook('actionValidateOrder')
+            && $this->registerHook('actionFrontControllerSetMedia')
+            && $this->registerHook('displayCheckoutSubtotalDetails')
             && Configuration::updateValue('MINORDER_FREE_SHIPPING_AMOUNT', 50)
             && Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', 0)
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
@@ -306,15 +308,68 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookActionCartSave($params)
     {
-        // This hook can be used for additional logic when cart is saved
+        // Validation is done via JavaScript and checkout blocking
+    }
+
+    /**
+     * Hook on front controller to block checkout access
+     */
+    public function hookActionFrontControllerSetMedia($params)
+    {
+        $controller = Tools::getValue('controller');
+
+        // Block access to checkout if minimum order not reached
+        if ($controller === 'order' || $controller === 'orderopc') {
+            if (!$this->isMinimumOrderReached()) {
+                $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+                $cartTotal = $this->getCartTotalTaxIncluded();
+                $remaining = $minOrderAmount - $cartTotal;
+
+                // Add error message
+                $this->context->controller->errors[] = sprintf(
+                    $this->l('L\'importo minimo per effettuare un ordine è di %s. Il tuo carrello è di %s. Ti mancano %s.'),
+                    Tools::displayPrice($minOrderAmount),
+                    Tools::displayPrice($cartTotal),
+                    Tools::displayPrice($remaining)
+                );
+
+                // Redirect to cart
+                Tools::redirect($this->context->link->getPageLink('cart', true, null, ['action' => 'show']));
+            }
+        }
+    }
+
+    /**
+     * Display warning in checkout subtotal
+     */
+    public function hookDisplayCheckoutSubtotalDetails($params)
+    {
+        if (!$this->isMinimumOrderReached()) {
+            $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+            $cartTotal = $this->getCartTotalTaxIncluded();
+
+            $this->context->smarty->assign([
+                'min_order_amount' => $minOrderAmount,
+                'cart_total' => $cartTotal,
+                'remaining_amount' => $minOrderAmount - $cartTotal,
+                'currency_sign' => $this->context->currency->sign,
+            ]);
+
+            return $this->display(__FILE__, 'views/templates/hook/minimum_order_warning.tpl');
+        }
+
+        return '';
     }
 
     /**
      * Validate order - check minimum amount with tax included
+     * This is a last line of defense
      */
     public function hookActionValidateOrder($params)
     {
-        // Additional validation can be added here if needed
+        if (!$this->isMinimumOrderReached()) {
+            throw new PrestaShopException($this->l('Ordine minimo non raggiunto. Impossibile completare l\'ordine.'));
+        }
     }
 
     /**

@@ -52,6 +52,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
     protected function getProgress()
     {
         $freeShippingAmount = (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT');
+        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
 
         $cart = $this->context->cart;
@@ -63,14 +64,23 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 'remaining' => $freeShippingAmount,
                 'percentage' => 0,
                 'free_shipping_reached' => false,
+                'min_order_amount' => $minOrderAmount,
+                'min_order_remaining' => $minOrderAmount,
+                'min_order_reached' => $minOrderAmount <= 0,
             ]));
             return;
         }
 
         // Get cart total (products only) with or without tax
         $cartTotal = (float) $cart->getOrderTotal($useTaxIncl, Cart::ONLY_PRODUCTS);
+
+        // Free shipping calculations
         $remaining = max(0, $freeShippingAmount - $cartTotal);
         $percentage = $freeShippingAmount > 0 ? min(100, ($cartTotal / $freeShippingAmount) * 100) : 0;
+
+        // Minimum order calculations
+        $minOrderRemaining = max(0, $minOrderAmount - $cartTotal);
+        $minOrderReached = $minOrderAmount <= 0 || $cartTotal >= $minOrderAmount;
 
         $this->ajaxRender(json_encode([
             'success' => true,
@@ -79,6 +89,9 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'percentage' => round($percentage, 2),
             'free_shipping_reached' => $remaining <= 0,
             'free_shipping_amount' => $freeShippingAmount,
+            'min_order_amount' => $minOrderAmount,
+            'min_order_remaining' => round($minOrderRemaining, 2),
+            'min_order_reached' => $minOrderReached,
         ]));
     }
 }
