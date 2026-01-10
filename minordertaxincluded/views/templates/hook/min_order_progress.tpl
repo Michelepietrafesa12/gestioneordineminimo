@@ -71,17 +71,15 @@
                                     <span class="minorder-suggested-price">{$product.price_formatted}</span>
                                 </div>
                             </a>
-                            <form action="{$link->getPageLink('cart', true)}" method="post" class="minorder-add-to-cart-form">
-                                <input type="hidden" name="token" value="{$static_token}">
-                                <input type="hidden" name="id_product" value="{$product.id_product}">
-                                <input type="hidden" name="qty" value="1">
-                                <input type="hidden" name="add" value="1">
-                                <input type="hidden" name="action" value="update">
-                                <button type="submit" class="minorder-add-btn" title="{l s='Aggiungi al carrello' mod='minordertaxincluded'}">
-                                    <span class="minorder-icon">&#128722;</span>
-                                    <span class="minorder-add-text">{l s='Aggiungi' mod='minordertaxincluded'}</span>
-                                </button>
-                            </form>
+                            <button type="button"
+                                    class="minorder-add-btn"
+                                    data-id-product="{$product.id_product}"
+                                    data-id-product-attribute="0"
+                                    data-minimal-quantity="1"
+                                    title="{l s='Aggiungi al carrello' mod='minordertaxincluded'}">
+                                <span class="minorder-icon">&#128722;</span>
+                                <span class="minorder-add-text">{l s='Aggiungi' mod='minordertaxincluded'}</span>
+                            </button>
                         </div>
                     {/foreach}
                 </div>

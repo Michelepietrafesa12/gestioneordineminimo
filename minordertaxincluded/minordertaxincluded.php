@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.7.0';
+        $this->version = '1.8.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -53,7 +53,13 @@ class MinOrderTaxIncluded extends Module
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
             && Configuration::updateValue('MINORDER_USE_TAX_INCL', 1)
             && Configuration::updateValue('MINORDER_SHOW_SUGGESTED', 1)
-            && Configuration::updateValue('MINORDER_SUGGESTED_COUNT', 4);
+            && Configuration::updateValue('MINORDER_SUGGESTED_COUNT', 4)
+            // Style colors
+            && Configuration::updateValue('MINORDER_COLOR_PRIMARY', '#28a745')
+            && Configuration::updateValue('MINORDER_COLOR_SECONDARY', '#ff6b35')
+            && Configuration::updateValue('MINORDER_COLOR_WARNING', '#ffc107')
+            && Configuration::updateValue('MINORDER_COLOR_PROGRESS_BG', '#e9ecef')
+            && Configuration::updateValue('MINORDER_COLOR_BUTTON', '#28a745');
     }
 
     /**
@@ -67,7 +73,13 @@ class MinOrderTaxIncluded extends Module
             && Configuration::deleteByName('MINORDER_SHOW_PROGRESS_BAR')
             && Configuration::deleteByName('MINORDER_USE_TAX_INCL')
             && Configuration::deleteByName('MINORDER_SHOW_SUGGESTED')
-            && Configuration::deleteByName('MINORDER_SUGGESTED_COUNT');
+            && Configuration::deleteByName('MINORDER_SUGGESTED_COUNT')
+            // Style colors
+            && Configuration::deleteByName('MINORDER_COLOR_PRIMARY')
+            && Configuration::deleteByName('MINORDER_COLOR_SECONDARY')
+            && Configuration::deleteByName('MINORDER_COLOR_WARNING')
+            && Configuration::deleteByName('MINORDER_COLOR_PROGRESS_BG')
+            && Configuration::deleteByName('MINORDER_COLOR_BUTTON');
     }
 
     /**
@@ -92,10 +104,23 @@ class MinOrderTaxIncluded extends Module
             Configuration::updateValue('MINORDER_SHOW_SUGGESTED', $showSuggested);
             Configuration::updateValue('MINORDER_SUGGESTED_COUNT', max(1, min(8, $suggestedCount)));
 
+            // Save color settings
+            $colorPrimary = Tools::getValue('MINORDER_COLOR_PRIMARY', '#28a745');
+            $colorSecondary = Tools::getValue('MINORDER_COLOR_SECONDARY', '#ff6b35');
+            $colorWarning = Tools::getValue('MINORDER_COLOR_WARNING', '#ffc107');
+            $colorProgressBg = Tools::getValue('MINORDER_COLOR_PROGRESS_BG', '#e9ecef');
+            $colorButton = Tools::getValue('MINORDER_COLOR_BUTTON', '#28a745');
+
+            Configuration::updateValue('MINORDER_COLOR_PRIMARY', $colorPrimary);
+            Configuration::updateValue('MINORDER_COLOR_SECONDARY', $colorSecondary);
+            Configuration::updateValue('MINORDER_COLOR_WARNING', $colorWarning);
+            Configuration::updateValue('MINORDER_COLOR_PROGRESS_BG', $colorProgressBg);
+            Configuration::updateValue('MINORDER_COLOR_BUTTON', $colorButton);
+
             $output .= $this->displayConfirmation($this->l('Impostazioni salvate con successo.'));
         }
 
-        return $output . $this->renderForm();
+        return $output . $this->renderForm() . $this->renderStyleForm();
     }
 
     /**
@@ -219,6 +244,81 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
+     * Render style/color configuration form
+     */
+    protected function renderStyleForm()
+    {
+        $fields_form = [
+            'form' => [
+                'legend' => [
+                    'title' => $this->l('Personalizzazione Colori'),
+                    'icon' => 'icon-paint-brush',
+                ],
+                'input' => [
+                    [
+                        'type' => 'color',
+                        'label' => $this->l('Colore primario (successo/barra)'),
+                        'name' => 'MINORDER_COLOR_PRIMARY',
+                        'desc' => $this->l('Colore della barra di progresso e messaggi di successo. Default: #28a745 (verde)'),
+                        'class' => 'mColorPicker',
+                    ],
+                    [
+                        'type' => 'color',
+                        'label' => $this->l('Colore secondario (prezzi)'),
+                        'name' => 'MINORDER_COLOR_SECONDARY',
+                        'desc' => $this->l('Colore dei prezzi nei prodotti consigliati. Default: #ff6b35 (arancione)'),
+                        'class' => 'mColorPicker',
+                    ],
+                    [
+                        'type' => 'color',
+                        'label' => $this->l('Colore avviso'),
+                        'name' => 'MINORDER_COLOR_WARNING',
+                        'desc' => $this->l('Colore delle icone di avviso. Default: #ffc107 (giallo)'),
+                        'class' => 'mColorPicker',
+                    ],
+                    [
+                        'type' => 'color',
+                        'label' => $this->l('Sfondo barra progresso'),
+                        'name' => 'MINORDER_COLOR_PROGRESS_BG',
+                        'desc' => $this->l('Colore di sfondo della barra di progresso. Default: #e9ecef (grigio chiaro)'),
+                        'class' => 'mColorPicker',
+                    ],
+                    [
+                        'type' => 'color',
+                        'label' => $this->l('Colore pulsante Aggiungi'),
+                        'name' => 'MINORDER_COLOR_BUTTON',
+                        'desc' => $this->l('Colore del pulsante "Aggiungi al carrello". Default: #28a745 (verde)'),
+                        'class' => 'mColorPicker',
+                    ],
+                ],
+                'submit' => [
+                    'title' => $this->l('Salva Colori'),
+                    'class' => 'btn btn-default pull-right',
+                ],
+            ],
+        ];
+
+        $helper = new HelperForm();
+        $helper->show_toolbar = false;
+        $helper->table = $this->table;
+        $helper->module = $this;
+        $helper->default_form_language = (int) Configuration::get('PS_LANG_DEFAULT');
+        $helper->allow_employee_form_lang = Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG') ? Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG') : 0;
+        $helper->identifier = $this->identifier;
+        $helper->submit_action = 'submitMinOrderSettings';
+        $helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false)
+            . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name;
+        $helper->token = Tools::getAdminTokenLite('AdminModules');
+        $helper->tpl_vars = [
+            'fields_value' => $this->getStyleFormValues(),
+            'languages' => $this->context->controller->getLanguages(),
+            'id_language' => $this->context->language->id,
+        ];
+
+        return $helper->generateForm([$fields_form]);
+    }
+
+    /**
      * Get configuration values
      */
     protected function getConfigFormValues()
@@ -230,6 +330,20 @@ class MinOrderTaxIncluded extends Module
             'MINORDER_USE_TAX_INCL' => Configuration::get('MINORDER_USE_TAX_INCL'),
             'MINORDER_SHOW_SUGGESTED' => Configuration::get('MINORDER_SHOW_SUGGESTED'),
             'MINORDER_SUGGESTED_COUNT' => Configuration::get('MINORDER_SUGGESTED_COUNT'),
+        ];
+    }
+
+    /**
+     * Get style/color configuration values
+     */
+    protected function getStyleFormValues()
+    {
+        return [
+            'MINORDER_COLOR_PRIMARY' => Configuration::get('MINORDER_COLOR_PRIMARY') ?: '#28a745',
+            'MINORDER_COLOR_SECONDARY' => Configuration::get('MINORDER_COLOR_SECONDARY') ?: '#ff6b35',
+            'MINORDER_COLOR_WARNING' => Configuration::get('MINORDER_COLOR_WARNING') ?: '#ffc107',
+            'MINORDER_COLOR_PROGRESS_BG' => Configuration::get('MINORDER_COLOR_PROGRESS_BG') ?: '#e9ecef',
+            'MINORDER_COLOR_BUTTON' => Configuration::get('MINORDER_COLOR_BUTTON') ?: '#28a745',
         ];
     }
 
@@ -250,7 +364,108 @@ class MinOrderTaxIncluded extends Module
             'minorder_cart_total' => $this->getCartTotalTaxIncluded(),
         ]);
 
-        return '';
+        // Add dynamic color CSS
+        return $this->generateDynamicCSS();
+    }
+
+    /**
+     * Generate dynamic CSS based on color configuration
+     */
+    protected function generateDynamicCSS()
+    {
+        $colorPrimary = Configuration::get('MINORDER_COLOR_PRIMARY') ?: '#28a745';
+        $colorSecondary = Configuration::get('MINORDER_COLOR_SECONDARY') ?: '#ff6b35';
+        $colorWarning = Configuration::get('MINORDER_COLOR_WARNING') ?: '#ffc107';
+        $colorProgressBg = Configuration::get('MINORDER_COLOR_PROGRESS_BG') ?: '#e9ecef';
+        $colorButton = Configuration::get('MINORDER_COLOR_BUTTON') ?: '#28a745';
+
+        // Calculate darker shade for hover
+        $colorButtonHover = $this->adjustBrightness($colorButton, -20);
+        $colorPrimaryLight = $this->adjustBrightness($colorPrimary, 40);
+
+        $css = "
+        <style>
+        /* Dynamic colors for Min Order module */
+        :root {
+            --minorder-primary: {$colorPrimary};
+            --minorder-secondary: {$colorSecondary};
+            --minorder-warning: {$colorWarning};
+            --minorder-progress-bg: {$colorProgressBg};
+            --minorder-button: {$colorButton};
+            --minorder-button-hover: {$colorButtonHover};
+            --minorder-primary-light: {$colorPrimaryLight};
+        }
+
+        .minorder-success {
+            background-color: {$colorPrimaryLight} !important;
+            border-color: {$colorPrimary} !important;
+        }
+        .minorder-success .minorder-icon,
+        .minorder-target {
+            color: {$colorPrimary} !important;
+        }
+
+        .minorder-progress-bar {
+            background-color: {$colorProgressBg} !important;
+        }
+        .minorder-progress-fill {
+            background: linear-gradient(90deg, {$colorPrimary} 0%, {$colorPrimaryLight} 100%) !important;
+        }
+
+        .minorder-icon-warning {
+            color: {$colorWarning} !important;
+        }
+
+        .minorder-suggested-price {
+            color: {$colorSecondary} !important;
+        }
+        .minorder-suggested-title .minorder-icon {
+            color: {$colorSecondary} !important;
+        }
+
+        .minorder-add-btn {
+            background: linear-gradient(135deg, {$colorButton} 0%, {$colorButtonHover} 100%) !important;
+        }
+        .minorder-add-btn:hover {
+            background: linear-gradient(135deg, {$colorButtonHover} 0%, {$colorButton} 100%) !important;
+        }
+
+        .minorder-suggested-item.minorder-reaches-min {
+            border-color: {$colorPrimary} !important;
+            box-shadow: 0 0 0 1px {$colorPrimary} !important;
+        }
+        .minorder-suggested-item.minorder-reaches-min::before {
+            background: linear-gradient(90deg, {$colorPrimary}, {$colorPrimaryLight}) !important;
+        }
+        .minorder-badge-reaches {
+            background: linear-gradient(135deg, {$colorPrimary} 0%, {$colorPrimaryLight} 100%) !important;
+        }
+        </style>
+        ";
+
+        return $css;
+    }
+
+    /**
+     * Adjust color brightness
+     */
+    protected function adjustBrightness($hex, $percent)
+    {
+        $hex = ltrim($hex, '#');
+
+        if (strlen($hex) == 3) {
+            $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
+        }
+
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+
+        $r = max(0, min(255, $r + ($r * $percent / 100)));
+        $g = max(0, min(255, $g + ($g * $percent / 100)));
+        $b = max(0, min(255, $b + ($b * $percent / 100)));
+
+        return sprintf('#%02x%02x%02x', $r, $g, $b);
     }
 
     /**
