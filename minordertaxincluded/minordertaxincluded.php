@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.0.0';
+        $this->version = '1.1.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -38,11 +38,7 @@ class MinOrderTaxIncluded extends Module
      */
     public function install()
     {
-        // Clean up any existing overrides from previous installations
-        $this->cleanupExistingOverrides();
-
         return parent::install()
-            && $this->installOverrides()
             && $this->registerHook('displayShoppingCart')
             && $this->registerHook('displayShoppingCartFooter')
             && $this->registerHook('actionCartSave')
@@ -56,32 +52,11 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Clean up existing overrides from previous installations
-     * This handles the case where the module was previously installed
-     * and the override still exists in the system
-     */
-    private function cleanupExistingOverrides()
-    {
-        try {
-            // Try to uninstall any existing overrides from this module
-            $this->uninstallOverrides();
-        } catch (Exception $e) {
-            // Ignore errors during cleanup - the override might not exist
-        }
-
-        // Clear the class cache to ensure PrestaShop reloads classes
-        if (file_exists(_PS_CACHE_DIR_ . 'class_index.php')) {
-            @unlink(_PS_CACHE_DIR_ . 'class_index.php');
-        }
-    }
-
-    /**
      * Uninstall module
      */
     public function uninstall()
     {
-        return $this->uninstallOverrides()
-            && parent::uninstall()
+        return parent::uninstall()
             && Configuration::deleteByName('MINORDER_FREE_SHIPPING_AMOUNT')
             && Configuration::deleteByName('MINORDER_MIN_ORDER_AMOUNT')
             && Configuration::deleteByName('MINORDER_SHOW_PROGRESS_BAR')
