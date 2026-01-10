@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.8.1';
+        $this->version = '1.9.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -785,7 +785,7 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Get suggested products to reach minimum order
-     * Returns bestseller products that would help customer reach the minimum order threshold
+     * Uses smart logic: products bought together + bestsellers, sorted by price proximity
      */
     public function getSuggestedProducts($remainingAmount = null)
     {
@@ -806,7 +806,6 @@ class MinOrderTaxIncluded extends Module
 
         $cart = $this->context->cart;
         $idLang = $this->context->language->id;
-        $idShop = $this->context->shop->id;
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
 
         // Get product IDs already in cart to exclude them
@@ -818,51 +817,43 @@ class MinOrderTaxIncluded extends Module
             }
         }
 
-        // Build query to find bestseller products (active, available, in stock)
-        $sql = new DbQuery();
-        $sql->select('p.id_product, IFNULL(SUM(od.product_quantity), 0) as total_sold');
-        $sql->from('product', 'p');
-        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
-        $sql->innerJoin('product_lang', 'pl', 'pl.id_product = p.id_product AND pl.id_lang = ' . (int) $idLang . ' AND pl.id_shop = ' . (int) $idShop);
-        $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
+        // Step 1: Get products frequently bought together with cart products
+        $relatedProductIds = $this->getFrequentlyBoughtTogether($cartProductIds, $count * 2);
 
-        // Left join with order_detail to count sales
-        $sql->leftJoin('order_detail', 'od', 'od.product_id = p.id_product');
-
-        // Only active and available products with stock
-        $sql->where('ps.active = 1');
-        $sql->where('p.available_for_order = 1');
-        $sql->where('sa.quantity > 0');
-
-        // Exclude products already in cart
-        if (!empty($cartProductIds)) {
-            $sql->where('p.id_product NOT IN (' . implode(',', $cartProductIds) . ')');
+        // Step 2: If not enough, add bestsellers
+        if (count($relatedProductIds) < $count * 2) {
+            $bestsellerIds = $this->getBestsellerProductIds(
+                $count * 2 - count($relatedProductIds),
+                array_merge($cartProductIds, $relatedProductIds)
+            );
+            $relatedProductIds = array_merge($relatedProductIds, $bestsellerIds);
         }
 
-        // Group by product and order by total sold (bestsellers first)
-        $sql->groupBy('p.id_product');
-        $sql->orderBy('total_sold DESC, p.id_product DESC');
-        $sql->limit($count);
-
-        $results = Db::getInstance()->executeS($sql);
-
-        if (empty($results)) {
-            // Fallback: get newest products if no sales data
-            return $this->getFallbackSuggestedProducts($count, $cartProductIds);
+        // Step 3: If still not enough, add newest products
+        if (empty($relatedProductIds)) {
+            $relatedProductIds = $this->getNewestProductIds($count, $cartProductIds);
         }
 
+        if (empty($relatedProductIds)) {
+            return [];
+        }
+
+        // Step 4: Build product data with prices
         $suggestedProducts = [];
-        foreach ($results as $row) {
-            $product = new Product((int) $row['id_product'], true, $idLang);
+        foreach ($relatedProductIds as $productId) {
+            $product = new Product((int) $productId, true, $idLang);
 
             if (!Validate::isLoadedObject($product)) {
                 continue;
             }
 
-            // Get price with or without tax
             $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
 
-            // Get cover image
+            // Skip if price is 0
+            if ($price <= 0) {
+                continue;
+            }
+
             $cover = Product::getCover($product->id);
             $imageUrl = '';
             if ($cover) {
@@ -882,29 +873,80 @@ class MinOrderTaxIncluded extends Module
                 'image_url' => $imageUrl,
                 'description_short' => strip_tags($product->description_short),
                 'reaches_minimum' => ($price >= $remainingAmount),
+                'price_distance' => abs($price - $remainingAmount),
             ];
         }
 
-        return $suggestedProducts;
+        // Step 5: Sort by price proximity to remaining amount (closest first)
+        usort($suggestedProducts, function ($a, $b) {
+            return $a['price_distance'] <=> $b['price_distance'];
+        });
+
+        // Return only the requested count
+        return array_slice($suggestedProducts, 0, $count);
     }
 
     /**
-     * Fallback method to get suggested products when main query returns empty
-     * Returns newest active products as fallback
+     * Get products frequently bought together with the cart products
+     * This is the "chi ha comprato X ha comprato anche Y" logic
      */
-    protected function getFallbackSuggestedProducts($count, $excludeIds = [])
+    protected function getFrequentlyBoughtTogether($cartProductIds, $limit = 8)
     {
-        $idLang = $this->context->language->id;
-        $idShop = $this->context->shop->id;
-        $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
-        $remainingAmount = $this->getRemainingForMinimumOrder();
+        if (empty($cartProductIds)) {
+            return [];
+        }
 
-        // Get newest active products as fallback
+        $idShop = $this->context->shop->id;
+
+        // Find orders that contain the cart products, then get other products from those orders
+        // Ordered by frequency (how many times they appear together)
         $sql = new DbQuery();
-        $sql->select('p.id_product');
+        $sql->select('od2.product_id, COUNT(DISTINCT od2.id_order) as frequency');
+        $sql->from('order_detail', 'od1');
+        $sql->innerJoin('order_detail', 'od2', 'od2.id_order = od1.id_order AND od2.product_id != od1.product_id');
+        $sql->innerJoin('product', 'p', 'p.id_product = od2.product_id');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
+        $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
+
+        // Cart products are the source
+        $sql->where('od1.product_id IN (' . implode(',', array_map('intval', $cartProductIds)) . ')');
+
+        // Exclude cart products from results
+        $sql->where('od2.product_id NOT IN (' . implode(',', array_map('intval', $cartProductIds)) . ')');
+
+        // Only active, available products with stock
+        $sql->where('ps.active = 1');
+        $sql->where('p.available_for_order = 1');
+        $sql->where('sa.quantity > 0');
+
+        // Group and order by frequency
+        $sql->groupBy('od2.product_id');
+        $sql->orderBy('frequency DESC');
+        $sql->limit((int) $limit);
+
+        $results = Db::getInstance()->executeS($sql);
+
+        if (empty($results)) {
+            return [];
+        }
+
+        return array_column($results, 'product_id');
+    }
+
+    /**
+     * Get bestseller product IDs
+     */
+    protected function getBestsellerProductIds($limit, $excludeIds = [])
+    {
+        $idShop = $this->context->shop->id;
+
+        $sql = new DbQuery();
+        $sql->select('p.id_product, IFNULL(SUM(od.product_quantity), 0) as total_sold');
         $sql->from('product', 'p');
         $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
         $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
+        $sql->leftJoin('order_detail', 'od', 'od.product_id = p.id_product');
+
         $sql->where('ps.active = 1');
         $sql->where('p.available_for_order = 1');
         $sql->where('sa.quantity > 0');
@@ -913,9 +955,9 @@ class MinOrderTaxIncluded extends Module
             $sql->where('p.id_product NOT IN (' . implode(',', array_map('intval', $excludeIds)) . ')');
         }
 
-        // Order by date added (newest first)
-        $sql->orderBy('p.date_add DESC');
-        $sql->limit($count);
+        $sql->groupBy('p.id_product');
+        $sql->orderBy('total_sold DESC, p.id_product DESC');
+        $sql->limit((int) $limit);
 
         $results = Db::getInstance()->executeS($sql);
 
@@ -923,38 +965,39 @@ class MinOrderTaxIncluded extends Module
             return [];
         }
 
-        $suggestedProducts = [];
-        foreach ($results as $row) {
-            $product = new Product((int) $row['id_product'], true, $idLang);
+        return array_column($results, 'id_product');
+    }
 
-            if (!Validate::isLoadedObject($product)) {
-                continue;
-            }
+    /**
+     * Get newest product IDs as fallback
+     */
+    protected function getNewestProductIds($limit, $excludeIds = [])
+    {
+        $idShop = $this->context->shop->id;
 
-            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
+        $sql = new DbQuery();
+        $sql->select('p.id_product');
+        $sql->from('product', 'p');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
+        $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
 
-            $cover = Product::getCover($product->id);
-            $imageUrl = '';
-            if ($cover) {
-                $imageUrl = $this->context->link->getImageLink(
-                    $product->link_rewrite,
-                    $cover['id_image'],
-                    ImageType::getFormattedName('small')
-                );
-            }
+        $sql->where('ps.active = 1');
+        $sql->where('p.available_for_order = 1');
+        $sql->where('sa.quantity > 0');
 
-            $suggestedProducts[] = [
-                'id_product' => $product->id,
-                'name' => $product->name,
-                'price' => $price,
-                'price_formatted' => Tools::displayPrice($price),
-                'link' => $this->context->link->getProductLink($product),
-                'image_url' => $imageUrl,
-                'description_short' => strip_tags($product->description_short),
-                'reaches_minimum' => ($price >= $remainingAmount),
-            ];
+        if (!empty($excludeIds)) {
+            $sql->where('p.id_product NOT IN (' . implode(',', array_map('intval', $excludeIds)) . ')');
         }
 
-        return $suggestedProducts;
+        $sql->orderBy('p.date_add DESC');
+        $sql->limit((int) $limit);
+
+        $results = Db::getInstance()->executeS($sql);
+
+        if (empty($results)) {
+            return [];
+        }
+
+        return array_column($results, 'id_product');
     }
 }
