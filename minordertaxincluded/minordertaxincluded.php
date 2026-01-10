@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.4.0';
+        $this->version = '1.5.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -312,10 +312,20 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookActionFrontControllerSetMedia($params)
     {
+        // Skip if this is a payment gateway callback/validation
+        if ($this->isPaymentCallback()) {
+            return;
+        }
+
         $controller = Tools::getValue('controller');
 
         // Block access to checkout if minimum order not reached
         if ($controller === 'order' || $controller === 'orderopc') {
+            // Don't block if cart is empty (order might already be processed)
+            if (!$this->hasCartProducts()) {
+                return;
+            }
+
             if (!$this->isMinimumOrderReached()) {
                 $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
                 $cartTotal = $this->getCartTotalTaxIncluded();
@@ -336,6 +346,71 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
+     * Check if current request is a payment gateway callback
+     * This prevents blocking PayPal, Nexi, Stripe and other payment returns
+     */
+    protected function isPaymentCallback()
+    {
+        $controller = Tools::getValue('controller');
+        $module = Tools::getValue('module');
+        $fc = Tools::getValue('fc');
+
+        // Payment module controllers (fc=module means it's a module front controller)
+        if ($fc === 'module') {
+            return true;
+        }
+
+        // Common payment validation/return controller names
+        $paymentControllers = [
+            'validation',
+            'confirm',
+            'return',
+            'cancel',
+            'notify',
+            'ipn',
+            'webhook',
+            'callback',
+            'success',
+            'error',
+            'payment',
+            'paymentreturn',
+            'orderconfirmation',
+        ];
+
+        if (in_array(strtolower($controller), $paymentControllers)) {
+            return true;
+        }
+
+        // Check for specific payment module names in controller
+        $paymentModules = ['paypal', 'nexi', 'stripe', 'braintree', 'mollie', 'adyen', 'klarna', 'satispay', 'scalapay'];
+        foreach ($paymentModules as $pm) {
+            if (stripos($controller, $pm) !== false || stripos($module, $pm) !== false) {
+                return true;
+            }
+        }
+
+        // Check if we're coming from a payment gateway (referer check)
+        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
+        $paymentDomains = ['paypal.com', 'nexi.it', 'stripe.com', 'braintree', 'mollie.com'];
+        foreach ($paymentDomains as $domain) {
+            if (stripos($referer, $domain) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if cart has products
+     */
+    protected function hasCartProducts()
+    {
+        $cart = $this->context->cart;
+        return Validate::isLoadedObject($cart) && $cart->nbProducts() > 0;
+    }
+
+    /**
      * Display warning in checkout subtotal - disabled to avoid duplicates
      * The redirect in hookActionFrontControllerSetMedia handles checkout blocking
      */
@@ -351,6 +426,11 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayPaymentTop($params)
     {
+        // Skip if this is a payment callback or cart is empty
+        if ($this->isPaymentCallback() || !$this->hasCartProducts()) {
+            return '';
+        }
+
         if (!$this->isMinimumOrderReached()) {
             $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
             $cartTotal = $this->getCartTotalTaxIncluded();
@@ -375,6 +455,11 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookActionCarrierProcess($params)
     {
+        // Skip if this is a payment callback or cart is empty
+        if ($this->isPaymentCallback() || !$this->hasCartProducts()) {
+            return;
+        }
+
         if (!$this->isMinimumOrderReached()) {
             // Redirect back to cart
             Tools::redirect($this->context->link->getPageLink('cart', true, null, ['action' => 'show']));
