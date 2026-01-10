@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.5.0';
+        $this->version = '1.6.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -51,7 +51,9 @@ class MinOrderTaxIncluded extends Module
             && Configuration::updateValue('MINORDER_FREE_SHIPPING_AMOUNT', 50)
             && Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', 0)
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
-            && Configuration::updateValue('MINORDER_USE_TAX_INCL', 1);
+            && Configuration::updateValue('MINORDER_USE_TAX_INCL', 1)
+            && Configuration::updateValue('MINORDER_SHOW_SUGGESTED', 1)
+            && Configuration::updateValue('MINORDER_SUGGESTED_COUNT', 4);
     }
 
     /**
@@ -63,7 +65,9 @@ class MinOrderTaxIncluded extends Module
             && Configuration::deleteByName('MINORDER_FREE_SHIPPING_AMOUNT')
             && Configuration::deleteByName('MINORDER_MIN_ORDER_AMOUNT')
             && Configuration::deleteByName('MINORDER_SHOW_PROGRESS_BAR')
-            && Configuration::deleteByName('MINORDER_USE_TAX_INCL');
+            && Configuration::deleteByName('MINORDER_USE_TAX_INCL')
+            && Configuration::deleteByName('MINORDER_SHOW_SUGGESTED')
+            && Configuration::deleteByName('MINORDER_SUGGESTED_COUNT');
     }
 
     /**
@@ -78,11 +82,15 @@ class MinOrderTaxIncluded extends Module
             $minOrderAmount = (float) Tools::getValue('MINORDER_MIN_ORDER_AMOUNT');
             $showProgressBar = (int) Tools::getValue('MINORDER_SHOW_PROGRESS_BAR');
             $useTaxIncl = (int) Tools::getValue('MINORDER_USE_TAX_INCL');
+            $showSuggested = (int) Tools::getValue('MINORDER_SHOW_SUGGESTED');
+            $suggestedCount = (int) Tools::getValue('MINORDER_SUGGESTED_COUNT');
 
             Configuration::updateValue('MINORDER_FREE_SHIPPING_AMOUNT', $freeShippingAmount);
             Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', $minOrderAmount);
             Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', $showProgressBar);
             Configuration::updateValue('MINORDER_USE_TAX_INCL', $useTaxIncl);
+            Configuration::updateValue('MINORDER_SHOW_SUGGESTED', $showSuggested);
+            Configuration::updateValue('MINORDER_SUGGESTED_COUNT', max(1, min(8, $suggestedCount)));
 
             $output .= $this->displayConfirmation($this->l('Impostazioni salvate con successo.'));
         }
@@ -156,6 +164,32 @@ class MinOrderTaxIncluded extends Module
                             ],
                         ],
                     ],
+                    [
+                        'type' => 'switch',
+                        'label' => $this->l('Mostra prodotti consigliati'),
+                        'name' => 'MINORDER_SHOW_SUGGESTED',
+                        'desc' => $this->l('Mostra prodotti consigliati per raggiungere l\'ordine minimo quando il carrello è sotto la soglia.'),
+                        'is_bool' => true,
+                        'values' => [
+                            [
+                                'id' => 'suggested_on',
+                                'value' => 1,
+                                'label' => $this->l('Si'),
+                            ],
+                            [
+                                'id' => 'suggested_off',
+                                'value' => 0,
+                                'label' => $this->l('No'),
+                            ],
+                        ],
+                    ],
+                    [
+                        'type' => 'text',
+                        'label' => $this->l('Numero prodotti consigliati'),
+                        'name' => 'MINORDER_SUGGESTED_COUNT',
+                        'desc' => $this->l('Numero di prodotti da mostrare come suggerimento (da 1 a 8).'),
+                        'class' => 'fixed-width-xs',
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->l('Salva'),
@@ -194,6 +228,8 @@ class MinOrderTaxIncluded extends Module
             'MINORDER_MIN_ORDER_AMOUNT' => Configuration::get('MINORDER_MIN_ORDER_AMOUNT'),
             'MINORDER_SHOW_PROGRESS_BAR' => Configuration::get('MINORDER_SHOW_PROGRESS_BAR'),
             'MINORDER_USE_TAX_INCL' => Configuration::get('MINORDER_USE_TAX_INCL'),
+            'MINORDER_SHOW_SUGGESTED' => Configuration::get('MINORDER_SHOW_SUGGESTED'),
+            'MINORDER_SUGGESTED_COUNT' => Configuration::get('MINORDER_SUGGESTED_COUNT'),
         ];
     }
 
@@ -252,6 +288,13 @@ class MinOrderTaxIncluded extends Module
         $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
         $minOrderReached = $cartTotal >= $minOrderAmount;
 
+        // Get suggested products if minimum not reached
+        $suggestedProducts = [];
+        $showSuggested = (bool) Configuration::get('MINORDER_SHOW_SUGGESTED');
+        if (!$minOrderReached && $showSuggested) {
+            $suggestedProducts = $this->getSuggestedProducts($remaining);
+        }
+
         $this->context->smarty->assign([
             'min_order_amount' => $minOrderAmount,
             'cart_total' => $cartTotal,
@@ -259,6 +302,8 @@ class MinOrderTaxIncluded extends Module
             'progress_percentage' => $percentage,
             'min_order_reached' => $minOrderReached,
             'currency_sign' => $this->context->currency->sign,
+            'suggested_products' => $suggestedProducts,
+            'show_suggested' => $showSuggested && !empty($suggestedProducts),
         ]);
 
         return $this->display(__FILE__, 'views/templates/hook/min_order_progress.tpl');
@@ -521,5 +566,188 @@ class MinOrderTaxIncluded extends Module
         $cartTotal = $this->getCartTotalTaxIncluded();
 
         return max(0, $freeShippingAmount - $cartTotal);
+    }
+
+    /**
+     * Get suggested products to reach minimum order
+     * Returns products that would help customer reach the minimum order threshold
+     */
+    public function getSuggestedProducts($remainingAmount = null)
+    {
+        if (!Configuration::get('MINORDER_SHOW_SUGGESTED')) {
+            return [];
+        }
+
+        $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
+        $count = max(1, min(8, $count));
+
+        if ($remainingAmount === null) {
+            $remainingAmount = $this->getRemainingForMinimumOrder();
+        }
+
+        if ($remainingAmount <= 0) {
+            return [];
+        }
+
+        $cart = $this->context->cart;
+        $idLang = $this->context->language->id;
+        $idShop = $this->context->shop->id;
+        $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
+
+        // Get product IDs already in cart to exclude them
+        $cartProductIds = [];
+        if (Validate::isLoadedObject($cart)) {
+            $cartProducts = $cart->getProducts();
+            foreach ($cartProducts as $product) {
+                $cartProductIds[] = (int) $product['id_product'];
+            }
+        }
+
+        // Build query to find active, available products
+        $sql = new DbQuery();
+        $sql->select('p.id_product');
+        $sql->from('product', 'p');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
+        $sql->innerJoin('product_lang', 'pl', 'pl.id_product = p.id_product AND pl.id_lang = ' . (int) $idLang . ' AND pl.id_shop = ' . (int) $idShop);
+        $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
+
+        // Only active and available products
+        $sql->where('ps.active = 1');
+        $sql->where('p.available_for_order = 1');
+        $sql->where('sa.quantity > 0');
+
+        // Exclude products already in cart
+        if (!empty($cartProductIds)) {
+            $sql->where('p.id_product NOT IN (' . implode(',', $cartProductIds) . ')');
+        }
+
+        // Get products with price close to remaining amount first, then cheaper products
+        // This helps customers reach the minimum with fewer products
+        if ($useTaxIncl) {
+            $sql->orderBy('ABS(ps.price * (1 + (SELECT rate/100 FROM ' . _DB_PREFIX_ . 'tax t INNER JOIN ' . _DB_PREFIX_ . 'tax_rule tr ON t.id_tax = tr.id_tax WHERE tr.id_tax_rules_group = p.id_tax_rules_group LIMIT 1)) - ' . (float) $remainingAmount . ') ASC');
+        } else {
+            $sql->orderBy('ABS(ps.price - ' . (float) $remainingAmount . ') ASC');
+        }
+
+        $sql->limit($count * 3); // Get extra to filter later
+
+        $results = Db::getInstance()->executeS($sql);
+
+        if (empty($results)) {
+            // Fallback: get random bestseller products
+            return $this->getFallbackSuggestedProducts($count, $cartProductIds);
+        }
+
+        $suggestedProducts = [];
+        foreach ($results as $row) {
+            $product = new Product((int) $row['id_product'], true, $idLang);
+
+            if (!Validate::isLoadedObject($product)) {
+                continue;
+            }
+
+            // Get price with or without tax
+            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
+
+            // Skip products that are too expensive (more than 3x the remaining amount)
+            if ($price > $remainingAmount * 3 && count($suggestedProducts) > 0) {
+                continue;
+            }
+
+            // Get cover image
+            $cover = Product::getCover($product->id);
+            $imageUrl = '';
+            if ($cover) {
+                $image = new Image($cover['id_image']);
+                $imageUrl = $this->context->link->getImageLink(
+                    $product->link_rewrite,
+                    $cover['id_image'],
+                    ImageType::getFormattedName('small')
+                );
+            }
+
+            $suggestedProducts[] = [
+                'id_product' => $product->id,
+                'name' => $product->name,
+                'price' => $price,
+                'price_formatted' => Tools::displayPrice($price),
+                'link' => $this->context->link->getProductLink($product),
+                'image_url' => $imageUrl,
+                'description_short' => strip_tags($product->description_short),
+                'reaches_minimum' => ($price >= $remainingAmount),
+            ];
+
+            if (count($suggestedProducts) >= $count) {
+                break;
+            }
+        }
+
+        return $suggestedProducts;
+    }
+
+    /**
+     * Fallback method to get suggested products when main query returns empty
+     */
+    protected function getFallbackSuggestedProducts($count, $excludeIds = [])
+    {
+        $idLang = $this->context->language->id;
+        $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
+        $remainingAmount = $this->getRemainingForMinimumOrder();
+
+        // Try to get bestseller products
+        $sql = new DbQuery();
+        $sql->select('DISTINCT p.id_product');
+        $sql->from('product', 'p');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $this->context->shop->id);
+        $sql->leftJoin('order_detail', 'od', 'od.product_id = p.id_product');
+        $sql->where('ps.active = 1');
+        $sql->where('p.available_for_order = 1');
+
+        if (!empty($excludeIds)) {
+            $sql->where('p.id_product NOT IN (' . implode(',', array_map('intval', $excludeIds)) . ')');
+        }
+
+        $sql->orderBy('od.id_order_detail DESC');
+        $sql->limit($count);
+
+        $results = Db::getInstance()->executeS($sql);
+
+        if (empty($results)) {
+            return [];
+        }
+
+        $suggestedProducts = [];
+        foreach ($results as $row) {
+            $product = new Product((int) $row['id_product'], true, $idLang);
+
+            if (!Validate::isLoadedObject($product)) {
+                continue;
+            }
+
+            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
+
+            $cover = Product::getCover($product->id);
+            $imageUrl = '';
+            if ($cover) {
+                $imageUrl = $this->context->link->getImageLink(
+                    $product->link_rewrite,
+                    $cover['id_image'],
+                    ImageType::getFormattedName('small')
+                );
+            }
+
+            $suggestedProducts[] = [
+                'id_product' => $product->id,
+                'name' => $product->name,
+                'price' => $price,
+                'price_formatted' => Tools::displayPrice($price),
+                'link' => $this->context->link->getProductLink($product),
+                'image_url' => $imageUrl,
+                'description_short' => strip_tags($product->description_short),
+                'reaches_minimum' => ($price >= $remainingAmount),
+            ];
+        }
+
+        return $suggestedProducts;
     }
 }

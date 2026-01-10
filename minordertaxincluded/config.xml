@@ -2,7 +2,7 @@
 <module>
     <name>minordertaxincluded</name>
     <displayName><![CDATA[Ordine Minimo IVA Inclusa]]></displayName>
-    <version><![CDATA[1.5.0]]></version>
+    <version><![CDATA[1.6.0]]></version>
     <description><![CDATA[Modifica il calcolo dell'ordine minimo usando prezzi IVA inclusa e mostra una barra di progresso per la spedizione gratuita.]]></description>
     <author><![CDATA[Developer]]></author>
     <tab><![CDATA[checkout]]></tab>
