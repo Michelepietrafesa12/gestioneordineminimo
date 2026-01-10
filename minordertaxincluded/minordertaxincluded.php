@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.8.0';
+        $this->version = '1.8.1';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -785,7 +785,7 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Get suggested products to reach minimum order
-     * Returns products that would help customer reach the minimum order threshold
+     * Returns bestseller products that would help customer reach the minimum order threshold
      */
     public function getSuggestedProducts($remainingAmount = null)
     {
@@ -818,15 +818,18 @@ class MinOrderTaxIncluded extends Module
             }
         }
 
-        // Build query to find active, available products
+        // Build query to find bestseller products (active, available, in stock)
         $sql = new DbQuery();
-        $sql->select('p.id_product');
+        $sql->select('p.id_product, IFNULL(SUM(od.product_quantity), 0) as total_sold');
         $sql->from('product', 'p');
         $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
         $sql->innerJoin('product_lang', 'pl', 'pl.id_product = p.id_product AND pl.id_lang = ' . (int) $idLang . ' AND pl.id_shop = ' . (int) $idShop);
         $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
 
-        // Only active and available products
+        // Left join with order_detail to count sales
+        $sql->leftJoin('order_detail', 'od', 'od.product_id = p.id_product');
+
+        // Only active and available products with stock
         $sql->where('ps.active = 1');
         $sql->where('p.available_for_order = 1');
         $sql->where('sa.quantity > 0');
@@ -836,20 +839,15 @@ class MinOrderTaxIncluded extends Module
             $sql->where('p.id_product NOT IN (' . implode(',', $cartProductIds) . ')');
         }
 
-        // Get products with price close to remaining amount first, then cheaper products
-        // This helps customers reach the minimum with fewer products
-        if ($useTaxIncl) {
-            $sql->orderBy('ABS(ps.price * (1 + (SELECT rate/100 FROM ' . _DB_PREFIX_ . 'tax t INNER JOIN ' . _DB_PREFIX_ . 'tax_rule tr ON t.id_tax = tr.id_tax WHERE tr.id_tax_rules_group = p.id_tax_rules_group LIMIT 1)) - ' . (float) $remainingAmount . ') ASC');
-        } else {
-            $sql->orderBy('ABS(ps.price - ' . (float) $remainingAmount . ') ASC');
-        }
-
-        $sql->limit($count * 3); // Get extra to filter later
+        // Group by product and order by total sold (bestsellers first)
+        $sql->groupBy('p.id_product');
+        $sql->orderBy('total_sold DESC, p.id_product DESC');
+        $sql->limit($count);
 
         $results = Db::getInstance()->executeS($sql);
 
         if (empty($results)) {
-            // Fallback: get random bestseller products
+            // Fallback: get newest products if no sales data
             return $this->getFallbackSuggestedProducts($count, $cartProductIds);
         }
 
@@ -864,16 +862,10 @@ class MinOrderTaxIncluded extends Module
             // Get price with or without tax
             $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
 
-            // Skip products that are too expensive (more than 3x the remaining amount)
-            if ($price > $remainingAmount * 3 && count($suggestedProducts) > 0) {
-                continue;
-            }
-
             // Get cover image
             $cover = Product::getCover($product->id);
             $imageUrl = '';
             if ($cover) {
-                $image = new Image($cover['id_image']);
                 $imageUrl = $this->context->link->getImageLink(
                     $product->link_rewrite,
                     $cover['id_image'],
@@ -891,10 +883,6 @@ class MinOrderTaxIncluded extends Module
                 'description_short' => strip_tags($product->description_short),
                 'reaches_minimum' => ($price >= $remainingAmount),
             ];
-
-            if (count($suggestedProducts) >= $count) {
-                break;
-            }
         }
 
         return $suggestedProducts;
@@ -902,27 +890,31 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Fallback method to get suggested products when main query returns empty
+     * Returns newest active products as fallback
      */
     protected function getFallbackSuggestedProducts($count, $excludeIds = [])
     {
         $idLang = $this->context->language->id;
+        $idShop = $this->context->shop->id;
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
         $remainingAmount = $this->getRemainingForMinimumOrder();
 
-        // Try to get bestseller products
+        // Get newest active products as fallback
         $sql = new DbQuery();
-        $sql->select('DISTINCT p.id_product');
+        $sql->select('p.id_product');
         $sql->from('product', 'p');
-        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $this->context->shop->id);
-        $sql->leftJoin('order_detail', 'od', 'od.product_id = p.id_product');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $idShop);
+        $sql->innerJoin('stock_available', 'sa', 'sa.id_product = p.id_product AND sa.id_product_attribute = 0 AND sa.id_shop = ' . (int) $idShop);
         $sql->where('ps.active = 1');
         $sql->where('p.available_for_order = 1');
+        $sql->where('sa.quantity > 0');
 
         if (!empty($excludeIds)) {
             $sql->where('p.id_product NOT IN (' . implode(',', array_map('intval', $excludeIds)) . ')');
         }
 
-        $sql->orderBy('od.id_order_detail DESC');
+        // Order by date added (newest first)
+        $sql->orderBy('p.date_add DESC');
         $sql->limit($count);
 
         $results = Db::getInstance()->executeS($sql);
