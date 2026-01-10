@@ -226,7 +226,8 @@
 
 /* Icon fallback for themes without Material Icons */
 .minorder-progress-container i.material-icons,
-.minorder-banner i.material-icons {
+.minorder-banner i.material-icons,
+.minorder-warning-container i.material-icons {
     font-family: 'Material Icons', sans-serif;
     font-weight: normal;
     font-style: normal;
@@ -238,4 +239,50 @@
     white-space: nowrap;
     direction: ltr;
     -webkit-font-smoothing: antialiased;
+}
+
+/* Minimum Order Warning Styles */
+.minorder-warning-container {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+    border: 2px solid #ffc107;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 15px 0;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3);
+}
+
+.minorder-warning-message {
+    display: flex;
+    align-items: center;
+    margin: 0 0 10px 0;
+    color: #856404;
+    font-size: 16px;
+}
+
+.minorder-warning-message i {
+    color: #dc3545;
+    margin-right: 10px;
+    font-size: 24px;
+}
+
+.minorder-warning-container p {
+    margin: 0;
+    color: #856404;
+    line-height: 1.6;
+}
+
+.minorder-warning-container strong {
+    color: #dc3545;
+}
+
+/* Blocked checkout button */
+.minorder-blocked {
+    pointer-events: none !important;
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+}
+
+.minorder-blocked::after {
+    content: ' (Ordine minimo non raggiunto)';
+    font-size: 11px;
 }

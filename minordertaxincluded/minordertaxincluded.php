@@ -224,10 +224,6 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayHeader()
     {
-        if (!Configuration::get('MINORDER_SHOW_PROGRESS_BAR')) {
-            return '';
-        }
-
         $this->context->controller->addCSS($this->_path . 'views/css/minordertaxincluded.css');
         $this->context->controller->addJS($this->_path . 'views/js/minordertaxincluded.js');
 
@@ -235,41 +231,56 @@ class MinOrderTaxIncluded extends Module
         Media::addJsDef([
             'minorder_ajax_url' => $this->context->link->getModuleLink($this->name, 'ajax'),
             'minorder_free_shipping' => (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT'),
+            'minorder_min_order' => (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT'),
             'minorder_currency_sign' => $this->context->currency->sign,
+            'minorder_cart_total' => $this->getCartTotalTaxIncluded(),
         ]);
 
         return '';
     }
 
     /**
-     * Display progress bar in shopping cart
+     * Display progress bar and minimum order warning in shopping cart
      */
     public function hookDisplayShoppingCartFooter($params)
     {
-        if (!Configuration::get('MINORDER_SHOW_PROGRESS_BAR')) {
-            return '';
-        }
-
-        $freeShippingAmount = (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT');
-
-        if ($freeShippingAmount <= 0) {
-            return '';
-        }
-
+        $output = '';
         $cartTotal = $this->getCartTotalTaxIncluded();
-        $remaining = $freeShippingAmount - $cartTotal;
-        $percentage = min(100, ($cartTotal / $freeShippingAmount) * 100);
 
-        $this->context->smarty->assign([
-            'free_shipping_amount' => $freeShippingAmount,
-            'cart_total' => $cartTotal,
-            'remaining_amount' => max(0, $remaining),
-            'progress_percentage' => $percentage,
-            'free_shipping_reached' => $remaining <= 0,
-            'currency_sign' => $this->context->currency->sign,
-        ]);
+        // Show minimum order warning if not reached
+        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+        if ($minOrderAmount > 0 && $cartTotal < $minOrderAmount) {
+            $this->context->smarty->assign([
+                'min_order_amount' => $minOrderAmount,
+                'cart_total' => $cartTotal,
+                'remaining_amount' => $minOrderAmount - $cartTotal,
+                'currency_sign' => $this->context->currency->sign,
+            ]);
+            $output .= $this->display(__FILE__, 'views/templates/hook/minimum_order_warning.tpl');
+        }
 
-        return $this->display(__FILE__, 'views/templates/hook/progress_bar.tpl');
+        // Show free shipping progress bar
+        if (Configuration::get('MINORDER_SHOW_PROGRESS_BAR')) {
+            $freeShippingAmount = (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT');
+
+            if ($freeShippingAmount > 0) {
+                $remaining = $freeShippingAmount - $cartTotal;
+                $percentage = min(100, ($cartTotal / $freeShippingAmount) * 100);
+
+                $this->context->smarty->assign([
+                    'free_shipping_amount' => $freeShippingAmount,
+                    'cart_total' => $cartTotal,
+                    'remaining_amount' => max(0, $remaining),
+                    'progress_percentage' => $percentage,
+                    'free_shipping_reached' => $remaining <= 0,
+                    'currency_sign' => $this->context->currency->sign,
+                ]);
+
+                $output .= $this->display(__FILE__, 'views/templates/hook/progress_bar.tpl');
+            }
+        }
+
+        return $output;
     }
 
     /**

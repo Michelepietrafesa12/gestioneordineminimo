@@ -8,7 +8,9 @@
 
     var MinOrderProgress = {
         container: null,
+        warningContainer: null,
         freeShippingAmount: 0,
+        minOrderAmount: 0,
         currencySign: '€',
 
         /**
@@ -16,9 +18,14 @@
          */
         init: function() {
             this.container = document.getElementById('minorder-progress-container');
+            this.warningContainer = document.getElementById('minorder-warning-container');
 
             if (typeof minorder_free_shipping !== 'undefined') {
                 this.freeShippingAmount = parseFloat(minorder_free_shipping);
+            }
+
+            if (typeof minorder_min_order !== 'undefined') {
+                this.minOrderAmount = parseFloat(minorder_min_order);
             }
 
             if (typeof minorder_currency_sign !== 'undefined') {
@@ -26,6 +33,7 @@
             }
 
             this.bindEvents();
+            this.checkMinimumOrder();
         },
 
         /**
@@ -73,7 +81,125 @@
             // Small delay to allow cart totals to update
             setTimeout(function() {
                 self.refreshProgressBar();
+                self.checkMinimumOrder();
             }, 300);
+        },
+
+        /**
+         * Check minimum order and block checkout if not reached
+         */
+        checkMinimumOrder: function() {
+            if (this.minOrderAmount <= 0) {
+                return;
+            }
+
+            var cartTotal = this.getCartTotalFromDOM();
+            var isMinReached = cartTotal >= this.minOrderAmount;
+
+            this.updateCheckoutButton(!isMinReached);
+            this.updateWarningDisplay(!isMinReached, cartTotal);
+        },
+
+        /**
+         * Get cart total from DOM
+         */
+        getCartTotalFromDOM: function() {
+            // Try multiple selectors for different PrestaShop themes
+            var selectors = [
+                '.cart-total .value',
+                '.cart-summary-line.cart-total .value',
+                '#cart-subtotal-products .value',
+                '.cart-summary-totals .cart-total .value',
+                '[data-subtotal-value]'
+            ];
+
+            for (var i = 0; i < selectors.length; i++) {
+                var el = document.querySelector(selectors[i]);
+                if (el) {
+                    var text = el.textContent || el.getAttribute('data-subtotal-value') || '';
+                    var value = parseFloat(text.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                    if (!isNaN(value) && value > 0) {
+                        return value;
+                    }
+                }
+            }
+
+            // Try from warning container data attribute
+            if (this.warningContainer) {
+                var dataTotal = this.warningContainer.getAttribute('data-cart-total');
+                if (dataTotal) {
+                    return parseFloat(dataTotal);
+                }
+            }
+
+            return 0;
+        },
+
+        /**
+         * Update checkout button state
+         */
+        updateCheckoutButton: function(disabled) {
+            var checkoutButtons = document.querySelectorAll(
+                '.checkout a, ' +
+                'a.btn-primary[href*="order"], ' +
+                '.cart-detailed-actions a.btn, ' +
+                '.cart-grid-right a.btn-primary, ' +
+                'a[href*="controller=order"], ' +
+                '.checkout-button, ' +
+                '#checkout-cart-summary a'
+            );
+
+            for (var i = 0; i < checkoutButtons.length; i++) {
+                var btn = checkoutButtons[i];
+                if (disabled) {
+                    btn.classList.add('disabled', 'minorder-blocked');
+                    btn.style.pointerEvents = 'none';
+                    btn.style.opacity = '0.5';
+                    btn.setAttribute('data-original-href', btn.getAttribute('href') || '');
+                    btn.setAttribute('href', 'javascript:void(0);');
+                    btn.onclick = function(e) {
+                        e.preventDefault();
+                        alert('Ordine minimo non raggiunto. Aggiungi altri prodotti al carrello.');
+                        return false;
+                    };
+                } else {
+                    btn.classList.remove('disabled', 'minorder-blocked');
+                    btn.style.pointerEvents = '';
+                    btn.style.opacity = '';
+                    var originalHref = btn.getAttribute('data-original-href');
+                    if (originalHref) {
+                        btn.setAttribute('href', originalHref);
+                    }
+                    btn.onclick = null;
+                }
+            }
+        },
+
+        /**
+         * Update warning display
+         */
+        updateWarningDisplay: function(show, cartTotal) {
+            if (!this.warningContainer) {
+                return;
+            }
+
+            if (show) {
+                this.warningContainer.style.display = 'block';
+                var remaining = this.minOrderAmount - cartTotal;
+
+                // Update dynamic values
+                var cartTotalEl = this.warningContainer.querySelector('.minorder-cart-total');
+                var remainingEl = this.warningContainer.querySelector('.minorder-remaining');
+
+                if (cartTotalEl) {
+                    cartTotalEl.textContent = this.formatCurrency(cartTotal);
+                }
+                if (remainingEl) {
+                    remainingEl.textContent = this.formatCurrency(remaining);
+                }
+            } else {
+                this.warningContainer.style.display = 'none';
+            }
         },
 
         /**
