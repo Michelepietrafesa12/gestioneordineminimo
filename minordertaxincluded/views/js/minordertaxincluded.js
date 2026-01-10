@@ -249,10 +249,9 @@
                 this.container.classList.add('updating');
             }
 
-            // Small delay to allow cart totals to update
+            // Reload entire section via AJAX to include suggested products
             setTimeout(function() {
-                self.refreshProgressBar();
-                self.checkMinimumOrder();
+                self.reloadProgressSection();
             }, 300);
         },
 
@@ -385,7 +384,67 @@
         },
 
         /**
-         * Refresh the progress bar via AJAX
+         * Reload entire progress section via AJAX (includes suggested products)
+         */
+        reloadProgressSection: function() {
+            var self = this;
+
+            if (typeof minorder_ajax_url === 'undefined') {
+                this.refreshProgressBar();
+                return;
+            }
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', minorder_ajax_url, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.success) {
+                            // Replace entire container with new HTML
+                            if (self.container && response.html) {
+                                var wrapper = self.container.parentNode;
+                                var tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = response.html;
+                                var newContainer = tempDiv.querySelector('#minorder-progress-container');
+
+                                if (newContainer) {
+                                    self.container.parentNode.replaceChild(newContainer, self.container);
+                                    self.container = newContainer;
+                                } else if (response.html.trim()) {
+                                    self.container.outerHTML = response.html;
+                                    self.container = document.getElementById('minorder-progress-container');
+                                }
+                            }
+
+                            // Update checkout buttons
+                            self.updateCheckoutButton(!response.min_order_reached);
+
+                            // Also update modal if open
+                            var modal = document.querySelector('.modal.show, .modal.in, #blockcart-modal');
+                            if (modal) {
+                                self.updateModalProgress(modal);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('MinOrderProgress: Error parsing response', e);
+                        self.refreshProgressBar();
+                    }
+                }
+            };
+
+            xhr.onerror = function() {
+                self.refreshProgressBar();
+            };
+
+            xhr.send('action=getProgressHtml&ajax=1');
+        },
+
+        /**
+         * Refresh the progress bar via AJAX (simple update without suggested products)
          */
         refreshProgressBar: function() {
             var self = this;

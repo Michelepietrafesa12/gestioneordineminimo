@@ -38,6 +38,10 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 $this->getProgress();
                 break;
 
+            case 'getProgressHtml':
+                $this->getProgressHtml();
+                break;
+
             default:
                 $this->ajaxRender(json_encode([
                     'success' => false,
@@ -92,6 +96,67 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'min_order_amount' => $minOrderAmount,
             'min_order_remaining' => round($minOrderRemaining, 2),
             'min_order_reached' => $minOrderReached,
+        ]));
+    }
+
+    /**
+     * Get rendered HTML for the progress bar section
+     * This is used to fully refresh the section including suggested products
+     */
+    protected function getProgressHtml()
+    {
+        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+        $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
+        $showSuggested = (bool) Configuration::get('MINORDER_SHOW_SUGGESTED');
+
+        $cart = $this->context->cart;
+
+        if ($minOrderAmount <= 0) {
+            $this->ajaxRender(json_encode([
+                'success' => true,
+                'html' => '',
+                'min_order_reached' => true,
+            ]));
+            return;
+        }
+
+        $cartTotal = 0;
+        if (Validate::isLoadedObject($cart)) {
+            $cartTotal = (float) $cart->getOrderTotal($useTaxIncl, Cart::ONLY_PRODUCTS);
+        }
+
+        $remaining = max(0, $minOrderAmount - $cartTotal);
+        $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
+        $minOrderReached = $cartTotal >= $minOrderAmount;
+
+        // Get suggested products if minimum not reached
+        $suggestedProducts = [];
+        if (!$minOrderReached && $showSuggested) {
+            $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+        }
+
+        $this->context->smarty->assign([
+            'min_order_amount' => $minOrderAmount,
+            'cart_total' => $cartTotal,
+            'remaining_amount' => $remaining,
+            'progress_percentage' => $percentage,
+            'min_order_reached' => $minOrderReached,
+            'currency_sign' => $this->context->currency->sign,
+            'suggested_products' => $suggestedProducts,
+            'show_suggested' => $showSuggested && !empty($suggestedProducts),
+        ]);
+
+        $html = $this->module->display(
+            $this->module->getLocalPath() . $this->module->name . '.php',
+            'views/templates/hook/min_order_progress.tpl'
+        );
+
+        $this->ajaxRender(json_encode([
+            'success' => true,
+            'html' => $html,
+            'cart_total' => round($cartTotal, 2),
+            'min_order_reached' => $minOrderReached,
+            'min_order_remaining' => round($remaining, 2),
         ]));
     }
 }

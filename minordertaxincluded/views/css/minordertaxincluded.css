@@ -369,24 +369,26 @@
 
 .minorder-suggested-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    max-width: 100%;
 }
 
 .minorder-suggested-item {
     background: #fff;
     border: 1px solid #e9ecef;
-    border-radius: 8px;
+    border-radius: 6px;
     overflow: hidden;
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
+    max-width: 150px;
 }
 
 .minorder-suggested-item:hover {
     border-color: #28a745;
-    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.15);
-    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.15);
+    transform: translateY(-1px);
 }
 
 .minorder-suggested-item.minorder-reaches-min {
@@ -404,18 +406,16 @@
 .minorder-suggested-image {
     position: relative;
     width: 100%;
-    padding-top: 100%;
+    height: 80px;
     overflow: hidden;
     background: #f8f9fa;
 }
 
 .minorder-suggested-image img {
-    position: absolute;
-    top: 0;
-    left: 0;
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    padding: 5px;
     transition: transform 0.3s ease;
 }
 
@@ -425,43 +425,44 @@
 
 .minorder-badge-reaches {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 4px;
+    right: 4px;
     background: #28a745;
     color: #fff;
-    font-size: 9px;
+    font-size: 7px;
     font-weight: 700;
-    padding: 3px 6px;
-    border-radius: 4px;
+    padding: 2px 4px;
+    border-radius: 3px;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
 }
 
 .minorder-suggested-info {
-    padding: 10px;
+    padding: 6px 8px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .minorder-suggested-name {
-    font-size: 12px;
+    font-size: 10px;
     color: #495057;
-    line-height: 1.3;
+    line-height: 1.2;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    min-height: 24px;
 }
 
 .minorder-suggested-price {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 700;
     color: #28a745;
 }
 
 .minorder-add-to-cart-form {
-    padding: 0 10px 10px;
+    padding: 0 6px 6px;
 }
 
 .minorder-add-btn {
@@ -469,13 +470,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    gap: 4px;
     background: #28a745;
     color: #fff;
     border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 12px;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -483,35 +484,45 @@
 
 .minorder-add-btn:hover {
     background: #218838;
-    transform: scale(1.02);
 }
 
 .minorder-add-btn .minorder-icon {
     margin-right: 0;
-    font-size: 14px;
+    font-size: 12px;
+}
+
+/* Responsive - Tablet */
+@media (max-width: 768px) {
+    .minorder-suggested-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .minorder-suggested-item {
+        max-width: none;
+    }
 }
 
 /* Responsive - Mobile */
 @media (max-width: 576px) {
     .minorder-suggested-grid {
         grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+        gap: 8px;
     }
 
     .minorder-suggested-title {
-        font-size: 13px;
+        font-size: 12px;
+    }
+
+    .minorder-suggested-image {
+        height: 60px;
     }
 
     .minorder-suggested-name {
-        font-size: 11px;
+        font-size: 9px;
+        min-height: 20px;
     }
 
     .minorder-suggested-price {
-        font-size: 13px;
-    }
-
-    .minorder-add-btn {
-        padding: 6px 10px;
         font-size: 11px;
     }
 
@@ -520,41 +531,50 @@
     }
 
     .minorder-add-btn .minorder-icon {
-        font-size: 16px;
+        font-size: 14px;
     }
 }
 
 /* Compact version for modals */
 .minorder-compact .minorder-suggested-products {
-    margin-top: 12px;
-    padding-top: 12px;
+    margin-top: 10px;
+    padding-top: 10px;
 }
 
 .minorder-compact .minorder-suggested-title {
-    font-size: 13px;
-    margin-bottom: 10px;
+    font-size: 11px;
+    margin-bottom: 8px;
 }
 
 .minorder-compact .minorder-suggested-grid {
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.minorder-compact .minorder-suggested-item {
+    max-width: none;
+}
+
+.minorder-compact .minorder-suggested-image {
+    height: 50px;
 }
 
 .minorder-compact .minorder-suggested-info {
-    padding: 6px;
+    padding: 4px 6px;
 }
 
 .minorder-compact .minorder-suggested-name {
-    font-size: 10px;
+    font-size: 9px;
+    min-height: 18px;
 }
 
 .minorder-compact .minorder-suggested-price {
-    font-size: 12px;
+    font-size: 10px;
 }
 
 .minorder-compact .minorder-add-btn {
-    padding: 5px 8px;
-    font-size: 10px;
+    padding: 4px 6px;
+    font-size: 9px;
 }
 
 .minorder-compact .minorder-add-text {
@@ -562,6 +582,6 @@
 }
 
 .minorder-compact .minorder-badge-reaches {
-    font-size: 7px;
-    padding: 2px 4px;
+    font-size: 6px;
+    padding: 1px 3px;
 }
