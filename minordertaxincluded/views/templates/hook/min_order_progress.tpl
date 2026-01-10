@@ -64,11 +64,19 @@
                                         {if $product.reaches_minimum}
                                             <span class="minorder-badge-reaches">{l s='Raggiungi la soglia!' mod='minordertaxincluded'}</span>
                                         {/if}
+                                        {if $product.is_bestseller}
+                                            <span class="minorder-badge-bestseller">{l s='Più acquistato' mod='minordertaxincluded'}</span>
+                                        {/if}
                                     </div>
                                 {/if}
                                 <div class="minorder-suggested-info">
                                     <span class="minorder-suggested-name">{$product.name|truncate:40:'...'|escape:'html':'UTF-8'}</span>
-                                    <span class="minorder-suggested-price">{$product.price_formatted}</span>
+                                    <div class="minorder-suggested-prices">
+                                        {if $product.has_discount}
+                                            <span class="minorder-suggested-price-regular">{$product.regular_price_formatted}</span>
+                                        {/if}
+                                        <span class="minorder-suggested-price">{$product.price_formatted}</span>
+                                    </div>
                                 </div>
                             </a>
                             <button type="button"

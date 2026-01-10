@@ -17,7 +17,7 @@ class MinOrderTaxIncluded extends Module
     {
         $this->name = 'minordertaxincluded';
         $this->tab = 'checkout';
-        $this->version = '1.9.0';
+        $this->version = '1.10.0';
         $this->author = 'Developer';
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
@@ -838,6 +838,9 @@ class MinOrderTaxIncluded extends Module
             return [];
         }
 
+        // Get bestseller IDs to mark them
+        $bestsellerProductIds = $this->getBestsellerProductIds($count * 3, $cartProductIds);
+
         // Step 4: Build product data with prices
         $suggestedProducts = [];
         foreach ($relatedProductIds as $productId) {
@@ -847,12 +850,24 @@ class MinOrderTaxIncluded extends Module
                 continue;
             }
 
+            // Get current price (with any discount applied)
             $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
 
             // Skip if price is 0
             if ($price <= 0) {
                 continue;
             }
+
+            // Get regular price (without discount)
+            $regularPrice = $useTaxIncl
+                ? $product->getPrice(true, null, 6, null, false, false)
+                : $product->getPrice(false, null, 6, null, false, false);
+
+            // Check if product has a discount
+            $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
+
+            // Check if product is a bestseller
+            $isBestseller = in_array($productId, $bestsellerProductIds);
 
             $cover = Product::getCover($product->id);
             $imageUrl = '';
@@ -869,6 +884,10 @@ class MinOrderTaxIncluded extends Module
                 'name' => $product->name,
                 'price' => $price,
                 'price_formatted' => Tools::displayPrice($price),
+                'regular_price' => $regularPrice,
+                'regular_price_formatted' => Tools::displayPrice($regularPrice),
+                'has_discount' => $hasDiscount,
+                'is_bestseller' => $isBestseller,
                 'link' => $this->context->link->getProductLink($product),
                 'image_url' => $imageUrl,
                 'description_short' => strip_tags($product->description_short),

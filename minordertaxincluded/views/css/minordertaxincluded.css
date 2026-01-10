@@ -470,6 +470,23 @@
     z-index: 2;
 }
 
+/* Badge "Più acquistato" - Red bestseller badge at bottom of image */
+.minorder-badge-bestseller {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 5px 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    text-align: center;
+    z-index: 2;
+}
+
 /* Product Info */
 .minorder-suggested-info {
     padding: 10px;
@@ -491,11 +508,28 @@
     min-height: 32px;
 }
 
+/* Prices container */
+.minorder-suggested-prices {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: auto;
+}
+
+/* Regular price (strikethrough) */
+.minorder-suggested-price-regular {
+    font-size: 12px;
+    font-weight: 400;
+    color: #999;
+    text-decoration: line-through;
+}
+
+/* Current/discounted price */
 .minorder-suggested-price {
     font-size: 14px;
     font-weight: 700;
     color: #ff6b35;
-    margin-top: auto;
 }
 
 /* Add to Cart Form & Button */
@@ -656,6 +690,23 @@
         top: 4px;
         left: 4px;
     }
+
+    .minorder-badge-bestseller {
+        font-size: 8px;
+        padding: 4px 6px;
+    }
+
+    .minorder-suggested-prices {
+        gap: 4px;
+    }
+
+    .minorder-suggested-price-regular {
+        font-size: 10px;
+    }
+
+    .minorder-suggested-price {
+        font-size: 12px;
+    }
 }
 
 /* ===========================================
@@ -748,6 +799,15 @@
     padding: 2px 4px;
     top: 3px;
     left: 3px;
+}
+
+.minorder-compact .minorder-badge-bestseller {
+    font-size: 7px;
+    padding: 3px 4px;
+}
+
+.minorder-compact .minorder-suggested-price-regular {
+    font-size: 9px;
 }
 
 .minorder-compact .minorder-suggested-item.minorder-reaches-min::before {
