@@ -99,6 +99,7 @@ class MinOrderTaxIncluded extends Module
     {
         $output = '';
 
+        // Save main settings
         if (Tools::isSubmit('submitMinOrderSettings')) {
             $freeShippingAmount = (float) Tools::getValue('MINORDER_FREE_SHIPPING_AMOUNT');
             $minOrderAmount = (float) Tools::getValue('MINORDER_MIN_ORDER_AMOUNT');
@@ -114,7 +115,11 @@ class MinOrderTaxIncluded extends Module
             Configuration::updateValue('MINORDER_SHOW_SUGGESTED', $showSuggested);
             Configuration::updateValue('MINORDER_SUGGESTED_COUNT', max(1, min(8, $suggestedCount)));
 
-            // Save color settings
+            $output .= $this->displayConfirmation($this->l('Impostazioni salvate con successo.'));
+        }
+
+        // Save color settings (separate action)
+        if (Tools::isSubmit('submitMinOrderColors')) {
             $colorPrimary = Tools::getValue('MINORDER_COLOR_PRIMARY', '#28a745');
             $colorSecondary = Tools::getValue('MINORDER_COLOR_SECONDARY', '#ff6b35');
             $colorWarning = Tools::getValue('MINORDER_COLOR_WARNING', '#ffc107');
@@ -137,7 +142,7 @@ class MinOrderTaxIncluded extends Module
             Configuration::updateValue('MINORDER_COLOR_CARD_BG', $colorCardBg);
             Configuration::updateValue('MINORDER_COLOR_CARD_BORDER', $colorCardBorder);
 
-            $output .= $this->displayConfirmation($this->l('Impostazioni salvate con successo.'));
+            $output .= $this->displayConfirmation($this->l('Colori salvati con successo.'));
         }
 
         return $output . $this->renderForm() . $this->renderStyleForm();
@@ -360,7 +365,7 @@ class MinOrderTaxIncluded extends Module
         $helper->default_form_language = (int) Configuration::get('PS_LANG_DEFAULT');
         $helper->allow_employee_form_lang = Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG') ? Configuration::get('PS_BO_ALLOW_EMPLOYEE_FORM_LANG') : 0;
         $helper->identifier = $this->identifier;
-        $helper->submit_action = 'submitMinOrderSettings';
+        $helper->submit_action = 'submitMinOrderColors';
         $helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false)
             . '&configure=' . $this->name . '&tab_module=' . $this->tab . '&module_name=' . $this->name;
         $helper->token = Tools::getAdminTokenLite('AdminModules');
