@@ -588,11 +588,10 @@
                         });
                     }
 
-                    // Reload section after delay
+                    // Restore button after delay (progress section already updated by updateCart event)
                     setTimeout(function() {
                         btn.innerHTML = originalBtnHtml;
                         btn.style.background = '';
-                        self.reloadProgressSection();
                     }, 1000);
                 } else {
                     // Error
