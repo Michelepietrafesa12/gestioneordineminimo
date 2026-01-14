@@ -46,8 +46,6 @@ class MinOrderTaxIncluded extends Module
             && $this->registerHook('displayBanner')
             && $this->registerHook('actionFrontControllerSetMedia')
             && $this->registerHook('displayCheckoutSubtotalDetails')
-            && $this->registerHook('displayPaymentTop')
-            && $this->registerHook('actionCarrierProcess')
             && Configuration::updateValue('MINORDER_FREE_SHIPPING_AMOUNT', 50)
             && Configuration::updateValue('MINORDER_MIN_ORDER_AMOUNT', 0)
             && Configuration::updateValue('MINORDER_SHOW_PROGRESS_BAR', 1)
@@ -805,52 +803,6 @@ class MinOrderTaxIncluded extends Module
     {
         // Return empty - checkout is blocked by redirect, no need for duplicate warnings
         return '';
-    }
-
-    /**
-     * Display warning before payment methods if minimum not reached
-     * This is shown if user somehow reaches the payment step
-     */
-    public function hookDisplayPaymentTop($params)
-    {
-        // Skip if this is a payment callback or cart is empty
-        if ($this->isPaymentCallback() || !$this->hasCartProducts()) {
-            return '';
-        }
-
-        if (!$this->isMinimumOrderReached()) {
-            $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
-            $cartTotal = $this->getCartTotalTaxIncluded();
-            $remaining = $minOrderAmount - $cartTotal;
-
-            $this->context->smarty->assign([
-                'min_order_amount' => $minOrderAmount,
-                'cart_total' => $cartTotal,
-                'remaining_amount' => $remaining,
-                'currency_sign' => $this->context->currency->sign,
-                'cart_url' => $this->context->link->getPageLink('cart', true, null, ['action' => 'show']),
-            ]);
-
-            return $this->display(__FILE__, 'views/templates/hook/payment_block.tpl');
-        }
-
-        return '';
-    }
-
-    /**
-     * Block carrier selection if minimum order not reached
-     */
-    public function hookActionCarrierProcess($params)
-    {
-        // Skip if this is a payment callback or cart is empty
-        if ($this->isPaymentCallback() || !$this->hasCartProducts()) {
-            return;
-        }
-
-        if (!$this->isMinimumOrderReached()) {
-            // Redirect back to cart
-            Tools::redirect($this->context->link->getPageLink('cart', true, null, ['action' => 'show']));
-        }
     }
 
     /**
