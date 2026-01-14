@@ -432,13 +432,15 @@ class MinOrderTaxIncluded extends Module
         $this->context->controller->addCSS($this->_path . 'views/css/minordertaxincluded.css');
         $this->context->controller->addJS($this->_path . 'views/js/minordertaxincluded.js');
 
-        // Pass configuration to JavaScript
+        // Pass configuration to JavaScript, including current page info
+        $controller = Tools::getValue('controller');
         Media::addJsDef([
             'minorder_ajax_url' => $this->context->link->getModuleLink($this->name, 'ajax'),
             'minorder_free_shipping' => (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT'),
             'minorder_min_order' => (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT'),
             'minorder_currency_sign' => $this->context->currency->sign,
             'minorder_cart_total' => $this->getCartTotalTaxIncluded(),
+            'minorder_current_controller' => $controller,
         ]);
 
         // Add dynamic color CSS

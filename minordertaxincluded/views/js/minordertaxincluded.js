@@ -343,12 +343,19 @@
          * Update checkout button state
          */
         updateCheckoutButton: function(disabled) {
+            // Only block buttons on cart-related pages, not on account pages
+            var currentController = typeof minorder_current_controller !== 'undefined' ? minorder_current_controller : '';
+            var allowedControllers = ['cart', 'order', 'orderopc', 'checkout'];
+
+            if (allowedControllers.indexOf(currentController) === -1) {
+                // Not on a cart page - don't block any buttons
+                return;
+            }
+
             var checkoutButtons = document.querySelectorAll(
                 '.checkout a, ' +
-                'a.btn-primary[href*="order"], ' +
                 '.cart-detailed-actions a.btn, ' +
                 '.cart-grid-right a.btn-primary, ' +
-                'a[href*="controller=order"], ' +
                 '.checkout-button'
             );
 
@@ -357,12 +364,18 @@
                 // Skip buttons inside modals - handled separately
                 if (btn.closest('.modal')) continue;
 
+                // Skip links to order history/details (account area)
+                var href = btn.getAttribute('href') || '';
+                if (href.indexOf('order-detail') !== -1 || href.indexOf('history') !== -1) {
+                    continue;
+                }
+
                 if (disabled) {
                     btn.classList.add('disabled', 'minorder-blocked');
                     btn.style.pointerEvents = 'none';
                     btn.style.opacity = '0.5';
                     if (!btn.getAttribute('data-original-href')) {
-                        btn.setAttribute('data-original-href', btn.getAttribute('href') || '');
+                        btn.setAttribute('data-original-href', href);
                     }
                     btn.setAttribute('href', 'javascript:void(0);');
                     btn.onclick = function(e) {

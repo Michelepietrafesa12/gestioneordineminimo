@@ -282,11 +282,6 @@
     cursor: not-allowed !important;
 }
 
-.minorder-blocked::after {
-    content: ' (Ordine minimo non raggiunto)';
-    font-size: 11px;
-}
-
 /* Compact version for modals */
 .minorder-compact {
     padding: 12px;
