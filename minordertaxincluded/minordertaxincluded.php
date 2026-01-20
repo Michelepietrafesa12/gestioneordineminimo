@@ -576,7 +576,8 @@ class MinOrderTaxIncluded extends Module
      */
     protected function adjustBrightness($hex, $percent)
     {
-        $hex = ltrim($hex, '#');
+        // PHP 8.x compatibility: ensure $hex is a string
+        $hex = ltrim((string) $hex, '#');
 
         if (strlen($hex) == 3) {
             $hex = $hex[0] . $hex[0] . $hex[1] . $hex[1] . $hex[2] . $hex[2];
@@ -736,9 +737,10 @@ class MinOrderTaxIncluded extends Module
      */
     protected function isPaymentCallback()
     {
-        $controller = Tools::getValue('controller');
-        $module = Tools::getValue('module');
-        $fc = Tools::getValue('fc');
+        // PHP 8.x compatibility: cast to string to avoid null/false issues
+        $controller = (string) Tools::getValue('controller');
+        $module = (string) Tools::getValue('module');
+        $fc = (string) Tools::getValue('fc');
 
         // Payment module controllers (fc=module means it's a module front controller)
         if ($fc === 'module') {
@@ -762,23 +764,24 @@ class MinOrderTaxIncluded extends Module
             'orderconfirmation',
         ];
 
-        if (in_array(strtolower($controller), $paymentControllers)) {
+        if ($controller !== '' && in_array(strtolower($controller), $paymentControllers)) {
             return true;
         }
 
         // Check for specific payment module names in controller
         $paymentModules = ['paypal', 'nexi', 'stripe', 'braintree', 'mollie', 'adyen', 'klarna', 'satispay', 'scalapay'];
         foreach ($paymentModules as $pm) {
-            if (stripos($controller, $pm) !== false || stripos($module, $pm) !== false) {
+            if (($controller !== '' && stripos($controller, $pm) !== false) ||
+                ($module !== '' && stripos($module, $pm) !== false)) {
                 return true;
             }
         }
 
         // Check if we're coming from a payment gateway (referer check)
-        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
+        $referer = isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : '';
         $paymentDomains = ['paypal.com', 'nexi.it', 'stripe.com', 'braintree', 'mollie.com'];
         foreach ($paymentDomains as $domain) {
-            if (stripos($referer, $domain) !== false) {
+            if ($referer !== '' && stripos($referer, $domain) !== false) {
                 return true;
             }
         }
@@ -971,7 +974,7 @@ class MinOrderTaxIncluded extends Module
                 'is_bestseller' => $isBestseller,
                 'link' => $this->context->link->getProductLink($product),
                 'image_url' => $imageUrl,
-                'description_short' => strip_tags($product->description_short),
+                'description_short' => strip_tags((string) $product->description_short),
                 'reaches_minimum' => ($price >= $remainingAmount),
                 'price_distance' => abs($price - $remainingAmount),
             ];
