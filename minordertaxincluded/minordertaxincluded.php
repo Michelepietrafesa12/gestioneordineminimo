@@ -22,7 +22,7 @@ class MinOrderTaxIncluded extends Module
         $this->need_instance = 0;
         $this->ps_versions_compliancy = [
             'min' => '1.7.0.0',
-            'max' => _PS_VERSION_,
+            'max' => '8.99.99',
         ];
         $this->bootstrap = true;
 
@@ -951,10 +951,12 @@ class MinOrderTaxIncluded extends Module
             $cover = Product::getCover($product->id);
             $imageUrl = '';
             if ($cover) {
+                // PS 8.x compatibility: getFormattedName is deprecated
+                $imageType = $this->getImageTypeName('home');
                 $imageUrl = $this->context->link->getImageLink(
                     $product->link_rewrite,
                     $cover['id_image'],
-                    ImageType::getFormattedName('home')
+                    $imageType
                 );
             }
 
@@ -1097,5 +1099,48 @@ class MinOrderTaxIncluded extends Module
         }
 
         return array_column($results, 'id_product');
+    }
+
+    /**
+     * Get image type name with PS 8.x compatibility
+     * In PS 8.x, ImageType::getFormattedName() is deprecated
+     */
+    protected function getImageTypeName($type)
+    {
+        // PrestaShop 8.x compatibility
+        if (version_compare(_PS_VERSION_, '8.0.0', '>=')) {
+            // In PS 8.x, use the type name directly or query the database
+            $sql = new DbQuery();
+            $sql->select('name');
+            $sql->from('image_type');
+            $sql->where('name LIKE \'%' . pSQL($type) . '%\'');
+            $sql->orderBy('width DESC');
+            $sql->limit(1);
+
+            $result = Db::getInstance()->getValue($sql);
+
+            if ($result) {
+                return $result;
+            }
+
+            // Fallback: return common PS 8 image type names
+            $ps8Types = [
+                'home' => 'home_default',
+                'small' => 'small_default',
+                'medium' => 'medium_default',
+                'large' => 'large_default',
+                'cart' => 'cart_default',
+            ];
+
+            return isset($ps8Types[$type]) ? $ps8Types[$type] : 'home_default';
+        }
+
+        // PrestaShop 1.7.x - use the old method
+        if (method_exists('ImageType', 'getFormattedName')) {
+            return ImageType::getFormattedName($type);
+        }
+
+        // Ultimate fallback
+        return $type . '_default';
     }
 }
