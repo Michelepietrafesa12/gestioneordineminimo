@@ -26,7 +26,195 @@
             }
 
             this.bindEvents();
-            this.checkMinimumOrder();
+
+            // If container doesn't exist and we're on cart page, inject it via JS
+            if (!this.container && this.minOrderAmount > 0 && this.isCartPage()) {
+                this.injectProgressBarIntoPage();
+            } else {
+                this.checkMinimumOrder();
+            }
+        },
+
+        /**
+         * Check if current page is cart page
+         */
+        isCartPage: function() {
+            var currentController = typeof minorder_current_controller !== 'undefined' ? minorder_current_controller : '';
+            return ['cart', 'order', 'checkout'].indexOf(currentController) !== -1;
+        },
+
+        /**
+         * Inject progress bar into cart page via JavaScript
+         * This is used when theme doesn't call standard PrestaShop hooks
+         */
+        injectProgressBarIntoPage: function() {
+            var self = this;
+
+            console.log('MinOrder: Injecting progress bar via JS');
+
+            // Find best location to inject
+            var targetSelectors = [
+                '.cart-grid-body',           // Classic theme
+                '#main .cart-container',     // Some themes
+                '.cart-detailed-totals',     // Before totals
+                '.cart-summary',             // Cart summary area
+                '#content-wrapper .cart',    // Generic cart
+                '#main'                       // Fallback to main content
+            ];
+
+            var target = null;
+            var insertPosition = 'beforeend'; // default: append inside
+
+            for (var i = 0; i < targetSelectors.length; i++) {
+                target = document.querySelector(targetSelectors[i]);
+                if (target) {
+                    // Special handling for certain selectors
+                    if (targetSelectors[i] === '.cart-detailed-totals' ||
+                        targetSelectors[i] === '.cart-summary') {
+                        insertPosition = 'beforebegin'; // insert before
+                    }
+                    console.log('MinOrder: Found target:', targetSelectors[i]);
+                    break;
+                }
+            }
+
+            if (!target) {
+                console.log('MinOrder: No suitable target found, trying body');
+                target = document.body;
+                insertPosition = 'afterbegin';
+            }
+
+            // Fetch progress bar HTML via AJAX
+            this.fetchAndInjectProgressBar(target, insertPosition);
+        },
+
+        /**
+         * Fetch progress bar HTML from server and inject it
+         */
+        fetchAndInjectProgressBar: function(target, insertPosition) {
+            var self = this;
+
+            if (typeof minorder_ajax_url === 'undefined') {
+                console.log('MinOrder: AJAX URL not defined, creating inline');
+                this.createInlineProgressBar(target, insertPosition);
+                return;
+            }
+
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', minorder_ajax_url, true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    try {
+                        var response = JSON.parse(xhr.responseText);
+                        if (response.success && response.html) {
+                            // Create wrapper and insert
+                            var wrapper = document.createElement('div');
+                            wrapper.className = 'minorder-injected-wrapper';
+                            wrapper.style.cssText = 'margin: 20px 0; clear: both;';
+                            wrapper.innerHTML = response.html;
+
+                            if (insertPosition === 'beforebegin') {
+                                target.parentNode.insertBefore(wrapper, target);
+                            } else if (insertPosition === 'afterbegin') {
+                                target.insertBefore(wrapper, target.firstChild);
+                            } else {
+                                target.appendChild(wrapper);
+                            }
+
+                            // Update container reference
+                            self.container = document.getElementById('minorder-progress-container');
+
+                            // Update checkout buttons
+                            self.updateCheckoutButton(!response.min_order_reached);
+
+                            console.log('MinOrder: Progress bar injected successfully');
+                        } else {
+                            console.log('MinOrder: AJAX returned no HTML, creating inline');
+                            self.createInlineProgressBar(target, insertPosition);
+                        }
+                    } catch (e) {
+                        console.warn('MinOrder: Error parsing AJAX response', e);
+                        self.createInlineProgressBar(target, insertPosition);
+                    }
+                } else {
+                    console.warn('MinOrder: AJAX error', xhr.status);
+                    self.createInlineProgressBar(target, insertPosition);
+                }
+            };
+
+            xhr.onerror = function() {
+                console.warn('MinOrder: AJAX request failed');
+                self.createInlineProgressBar(target, insertPosition);
+            };
+
+            xhr.send('action=getProgressHtml&ajax=1');
+        },
+
+        /**
+         * Create inline progress bar without AJAX (fallback)
+         */
+        createInlineProgressBar: function(target, insertPosition) {
+            var cartTotal = typeof minorder_cart_total !== 'undefined' ? parseFloat(minorder_cart_total) : 0;
+            var remaining = Math.max(0, this.minOrderAmount - cartTotal);
+            var percentage = Math.min(100, (cartTotal / this.minOrderAmount) * 100);
+            var minOrderReached = cartTotal >= this.minOrderAmount;
+
+            var wrapper = document.createElement('div');
+            wrapper.className = 'minorder-injected-wrapper';
+            wrapper.style.cssText = 'margin: 20px 0; clear: both;';
+            wrapper.innerHTML = this.createFullProgressBarHtml(cartTotal, remaining, percentage, minOrderReached);
+
+            if (insertPosition === 'beforebegin') {
+                target.parentNode.insertBefore(wrapper, target);
+            } else if (insertPosition === 'afterbegin') {
+                target.insertBefore(wrapper, target.firstChild);
+            } else {
+                target.appendChild(wrapper);
+            }
+
+            this.container = document.getElementById('minorder-progress-container');
+            this.updateCheckoutButton(!minOrderReached);
+
+            console.log('MinOrder: Inline progress bar created');
+        },
+
+        /**
+         * Create full progress bar HTML with container ID
+         */
+        createFullProgressBarHtml: function(cartTotal, remaining, percentage, minOrderReached) {
+            var html = '<div class="minorder-progress-container" id="minorder-progress-container" ' +
+                'data-min-order="' + this.minOrderAmount + '" ' +
+                'data-cart-total="' + cartTotal + '" ' +
+                'data-remaining="' + remaining + '">';
+
+            if (minOrderReached) {
+                html += '<div class="minorder-success">' +
+                    '<span class="minorder-icon">&#10003;</span>' +
+                    '<span>Ordine minimo raggiunto! Puoi procedere al checkout.</span>' +
+                    '</div>';
+            } else {
+                html += '<div class="minorder-info">' +
+                    '<p class="minorder-message">' +
+                    '<span class="minorder-icon minorder-icon-warning">&#9888;</span>' +
+                    '<span>Ordine minimo: <strong>' + this.formatCurrency(this.minOrderAmount) + '</strong> &mdash; ' +
+                    'Ti mancano <strong class="minorder-remaining-amount">' + this.formatCurrency(remaining) + '</strong></span>' +
+                    '</p></div>' +
+                    '<div class="minorder-progress-bar-wrapper">' +
+                    '<div class="minorder-progress-bar">' +
+                    '<div class="minorder-progress-fill" style="width: ' + percentage + '%;">' +
+                    '<span class="minorder-progress-text">' + Math.round(percentage) + '%</span>' +
+                    '</div></div>' +
+                    '<div class="minorder-progress-labels">' +
+                    '<span class="minorder-current">' + this.formatCurrency(cartTotal) + '</span>' +
+                    '<span class="minorder-target">' + this.formatCurrency(this.minOrderAmount) + '</span>' +
+                    '</div></div>';
+            }
+
+            html += '</div>';
+            return html;
         },
 
         /**
