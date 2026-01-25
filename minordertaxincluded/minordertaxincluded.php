@@ -652,17 +652,25 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Display progress bar in shopping cart page (footer)
+     * Only on cart page to avoid showing on mini-cart or other contexts
      */
     public function hookDisplayShoppingCartFooter($params)
     {
+        if (!$this->isCartPage()) {
+            return '';
+        }
         return $this->renderMinOrderProgressBarForPage();
     }
 
     /**
      * Display progress bar in shopping cart (main hook)
+     * Only on cart page to avoid showing on mini-cart or other contexts
      */
     public function hookDisplayShoppingCart($params)
     {
+        if (!$this->isCartPage()) {
+            return '';
+        }
         return $this->renderMinOrderProgressBarForPage();
     }
 
@@ -677,9 +685,14 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Display progress bar in reassurance area (Classic theme)
+     * Only on cart page, not on product pages
      */
     public function hookDisplayReassurance($params)
     {
+        // Only show on cart page - reassurance hook is also called on product pages
+        if (!$this->isCartPage()) {
+            return '';
+        }
         return $this->renderMinOrderProgressBarForPage();
     }
 
