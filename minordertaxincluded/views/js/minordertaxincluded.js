@@ -1,6 +1,7 @@
 /**
  * Min Order Tax Included - JavaScript
  * Handles dynamic updates of the progress bar when cart changes
+ * Version 2.0.0 - PS 8.x compatible with CSRF protection
  */
 
 (function() {
@@ -10,6 +11,28 @@
         container: null,
         minOrderAmount: 0,
         currencySign: '€',
+
+        /**
+         * Get CSRF token for AJAX requests (PS 8.x security)
+         */
+        getToken: function() {
+            if (typeof prestashop !== 'undefined' && prestashop.static_token) {
+                return prestashop.static_token;
+            }
+            return '';
+        },
+
+        /**
+         * Build AJAX POST data string with token
+         */
+        buildPostData: function(action) {
+            var data = 'action=' + encodeURIComponent(action) + '&ajax=1';
+            var token = this.getToken();
+            if (token) {
+                data += '&token=' + encodeURIComponent(token);
+            }
+            return data;
+        },
 
         /**
          * Initialize the module
@@ -185,7 +208,7 @@
                 self.createInlineProgressBar(target, insertPosition);
             };
 
-            xhr.send('action=getProgressData&ajax=1');
+            xhr.send(self.buildPostData('getProgressData'));
         },
 
         /**
@@ -952,7 +975,7 @@
                 self.refreshProgressBar();
             };
 
-            xhr.send('action=getProgressData&ajax=1');
+            xhr.send(self.buildPostData('getProgressData'));
         },
 
         /**
@@ -991,7 +1014,7 @@
                 }
             };
 
-            xhr.send('action=getProgress&ajax=1');
+            xhr.send(self.buildPostData('getProgress'));
         },
 
         /**

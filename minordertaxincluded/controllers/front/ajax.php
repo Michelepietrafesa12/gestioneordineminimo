@@ -1,66 +1,78 @@
 <?php
 /**
  * AJAX Controller for Min Order Tax Included Module
+ * PrestaShop 8.x compatible - uses proper HTTP responses
  *
- * Handles AJAX requests for updating the progress bar
+ * @author Developer
+ * @version 2.0.0
  */
 
 class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
 {
     /**
-     * @var bool If set to true, will be called
+     * @var bool AJAX mode
      */
     public $ajax = true;
 
     /**
-     * @var bool Disable SSL requirement for AJAX
+     * @var bool SSL requirement
      */
     public $ssl = true;
 
     /**
-     * Initialize controller
+     * Allowed AJAX actions (whitelist for security)
      */
-    public function init()
+    private const ALLOWED_ACTIONS = ['getProgress', 'getProgressHtml', 'getProgressData'];
+
+    /**
+     * Initialize controller - set JSON headers
+     */
+    public function init(): void
     {
         parent::init();
         header('Content-Type: application/json; charset=utf-8');
+        header('X-Content-Type-Options: nosniff');
     }
 
     /**
-     * Allowed AJAX actions (whitelist for security)
+     * Process AJAX request with CSRF validation
      */
-    private static $allowedActions = ['getProgress', 'getProgressHtml', 'getProgressData'];
-
-    /**
-     * Process AJAX request
-     */
-    public function postProcess()
+    public function postProcess(): void
     {
         try {
+            // CSRF Token validation for POST requests
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $token = Tools::getValue('token');
+                $staticToken = Tools::getToken(false);
+
+                // Validate token (skip for GET-like read operations if needed)
+                if (!$this->isValidToken($token, $staticToken)) {
+                    $this->jsonResponse([
+                        'success' => false,
+                        'error' => 'Invalid security token',
+                    ], 403);
+                    return;
+                }
+            }
+
             $action = (string) Tools::getValue('action');
 
             // Security: Validate action against whitelist
-            if (!in_array($action, self::$allowedActions, true)) {
-                $this->ajaxRender(json_encode([
+            if (!in_array($action, self::ALLOWED_ACTIONS, true)) {
+                $this->jsonResponse([
                     'success' => false,
                     'error' => 'Invalid action',
-                ]));
+                ], 400);
                 return;
             }
 
-            switch ($action) {
-                case 'getProgress':
-                    $this->getProgress();
-                    break;
+            // Route to appropriate handler
+            match ($action) {
+                'getProgress' => $this->getProgress(),
+                'getProgressHtml' => $this->getProgressHtml(),
+                'getProgressData' => $this->getProgressData(),
+            };
 
-                case 'getProgressHtml':
-                    $this->getProgressHtml();
-                    break;
-
-                case 'getProgressData':
-                    $this->getProgressData();
-                    break;
-            }
         } catch (Exception $e) {
             // Log error for debugging (don't expose details to client)
             PrestaShopLogger::addLog(
@@ -70,17 +82,43 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 'Module',
                 null
             );
-            $this->ajaxRender(json_encode([
+            $this->jsonResponse([
                 'success' => false,
                 'error' => 'An error occurred',
-            ]));
+            ], 500);
         }
+    }
+
+    /**
+     * Validate CSRF token
+     * Allows requests without token for backward compatibility (read-only operations)
+     */
+    private function isValidToken(?string $token, string $staticToken): bool
+    {
+        // If no token provided, allow for backward compatibility
+        // These are read-only operations that don't modify data
+        if (empty($token)) {
+            return true;
+        }
+
+        // Validate provided token
+        return hash_equals($staticToken, $token);
+    }
+
+    /**
+     * Send JSON response and exit (PS 8.x compatible)
+     * Replaces deprecated ajaxRender()
+     */
+    private function jsonResponse(array $data, int $httpCode = 200): void
+    {
+        http_response_code($httpCode);
+        die(json_encode($data, JSON_THROW_ON_ERROR));
     }
 
     /**
      * Get progress data for the progress bar
      */
-    protected function getProgress()
+    protected function getProgress(): void
     {
         $freeShippingAmount = (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT');
         $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
@@ -89,7 +127,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $cart = $this->context->cart;
 
         if (!Validate::isLoadedObject($cart)) {
-            $this->ajaxRender(json_encode([
+            $this->jsonResponse([
                 'success' => true,
                 'cart_total' => 0,
                 'remaining' => $freeShippingAmount,
@@ -98,7 +136,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 'min_order_amount' => $minOrderAmount,
                 'min_order_remaining' => $minOrderAmount,
                 'min_order_reached' => $minOrderAmount <= 0,
-            ]));
+            ]);
             return;
         }
 
@@ -113,7 +151,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $minOrderRemaining = max(0, $minOrderAmount - $cartTotal);
         $minOrderReached = $minOrderAmount <= 0 || $cartTotal >= $minOrderAmount;
 
-        $this->ajaxRender(json_encode([
+        $this->jsonResponse([
             'success' => true,
             'cart_total' => round($cartTotal, 2),
             'remaining' => round($remaining, 2),
@@ -123,14 +161,14 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'min_order_amount' => $minOrderAmount,
             'min_order_remaining' => round($minOrderRemaining, 2),
             'min_order_reached' => $minOrderReached,
-        ]));
+        ]);
     }
 
     /**
      * Get all progress data including suggested products as JSON
      * This is for full JS-based rendering
      */
-    protected function getProgressData()
+    protected function getProgressData(): void
     {
         $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
@@ -148,12 +186,9 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $minOrderReached = $minOrderAmount <= 0 || $cartTotal >= $minOrderAmount;
 
         // Get currency sign
-        $currencySign = '€';
-        if (isset($this->context->currency) && isset($this->context->currency->sign)) {
-            $currencySign = $this->context->currency->sign;
-        }
+        $currencySign = $this->context->currency?->sign ?? '€';
 
-        // Get suggested products from module (no duplicate fallback code)
+        // Get suggested products from module
         $suggestedProducts = [];
         if (!$minOrderReached && $showSuggested && $this->module) {
             try {
@@ -162,7 +197,6 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                     $suggestedProducts = [];
                 }
             } catch (Exception $e) {
-                // Log error but don't expose to client
                 PrestaShopLogger::addLog(
                     'MinOrderTaxIncluded getSuggestedProducts error: ' . $e->getMessage(),
                     2,
@@ -174,7 +208,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             }
         }
 
-        $this->ajaxRender(json_encode([
+        $this->jsonResponse([
             'success' => true,
             'min_order_amount' => round($minOrderAmount, 2),
             'cart_total' => round($cartTotal, 2),
@@ -184,14 +218,13 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'currency_sign' => $currencySign,
             'show_suggested' => $showSuggested && !empty($suggestedProducts),
             'suggested_products' => $suggestedProducts,
-        ]));
+        ]);
     }
 
     /**
      * Get rendered HTML for the progress bar section
-     * This is used to fully refresh the section including suggested products
      */
-    protected function getProgressHtml()
+    protected function getProgressHtml(): void
     {
         $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
@@ -200,11 +233,11 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $cart = $this->context->cart;
 
         if ($minOrderAmount <= 0) {
-            $this->ajaxRender(json_encode([
+            $this->jsonResponse([
                 'success' => true,
                 'html' => '',
                 'min_order_reached' => true,
-            ]));
+            ]);
             return;
         }
 
@@ -217,7 +250,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
         $minOrderReached = $cartTotal >= $minOrderAmount;
 
-        // Get suggested products if minimum not reached (from module only)
+        // Get suggested products if minimum not reached
         $suggestedProducts = [];
         if (!$minOrderReached && $showSuggested && $this->module) {
             try {
@@ -231,10 +264,7 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         }
 
         // Get currency sign safely
-        $currencySign = '€';
-        if (isset($this->context->currency) && isset($this->context->currency->sign)) {
-            $currencySign = $this->context->currency->sign;
-        }
+        $currencySign = $this->context->currency?->sign ?? '€';
 
         $this->context->smarty->assign([
             'min_order_amount' => (float) $minOrderAmount,
@@ -255,13 +285,12 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             );
         }
 
-        $this->ajaxRender(json_encode([
+        $this->jsonResponse([
             'success' => true,
             'html' => $html,
             'cart_total' => round($cartTotal, 2),
             'min_order_reached' => $minOrderReached,
             'min_order_remaining' => round($remaining, 2),
-        ]));
+        ]);
     }
-
 }

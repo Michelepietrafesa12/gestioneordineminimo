@@ -1063,25 +1063,42 @@ class MinOrderTaxIncluded extends Module
             return [];
         }
 
-        // Step 5: Build product array with prices
+        // Step 5: Build product array with prices using static method (NO N+1!)
+        // Product::getPriceStatic is optimized and doesn't load full Product object
         $suggestedProducts = [];
+        $imageType = $this->getImageTypeName('home');
+
         foreach ($productData as $data) {
             $productId = (int) $data['id_product'];
 
-            // Get prices using Product class (needed for tax calculations)
-            $product = new Product($productId, false, $idLang);
-            if (!Validate::isLoadedObject($product)) {
-                continue;
-            }
+            // Use static price calculation - much more efficient than new Product()
+            // Parameters: id_product, usetax, id_product_attribute, decimals, divisor, only_reduc, usereduc, quantity
+            $price = Product::getPriceStatic(
+                $productId,
+                $useTaxIncl,    // with tax
+                null,           // id_product_attribute
+                6,              // decimals
+                null,           // divisor
+                false,          // only_reduc (only return discount amount)
+                true,           // usereduc (apply discounts)
+                1               // quantity
+            );
 
-            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
             if ($price <= 0) {
                 continue;
             }
 
-            $regularPrice = $useTaxIncl
-                ? $product->getPrice(true, null, 6, null, false, false)
-                : $product->getPrice(false, null, 6, null, false, false);
+            // Get regular price without discounts
+            $regularPrice = Product::getPriceStatic(
+                $productId,
+                $useTaxIncl,
+                null,
+                6,
+                null,
+                false,          // only_reduc
+                false,          // usereduc = false means no discount applied
+                1
+            );
 
             $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
             $isBestseller = in_array($productId, $bestsellerProductIds);
@@ -1089,7 +1106,6 @@ class MinOrderTaxIncluded extends Module
             // Build image URL from bulk data
             $imageUrl = '';
             if (!empty($data['id_image'])) {
-                $imageType = $this->getImageTypeName('home');
                 $imageUrl = $this->context->link->getImageLink(
                     $data['link_rewrite'],
                     $data['id_image'],
