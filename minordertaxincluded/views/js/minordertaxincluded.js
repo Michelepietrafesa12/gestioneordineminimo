@@ -106,9 +106,13 @@
             xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
             xhr.onload = function() {
+                console.log('MinOrder: AJAX response status:', xhr.status);
+                console.log('MinOrder: AJAX raw response:', xhr.responseText.substring(0, 500));
+
                 if (xhr.status === 200) {
                     try {
                         var response = JSON.parse(xhr.responseText);
+                        console.log('MinOrder: Parsed response - success:', response.success, 'products:', (response.suggested_products || []).length);
                         if (response.success) {
                             // Use data to create HTML via JS
                             var cartTotal = parseFloat(response.cart_total) || 0;
@@ -151,11 +155,11 @@
 
                             console.log('MinOrder: Progress bar injected with ' + suggestedProducts.length + ' suggested products');
                         } else {
-                            console.log('MinOrder: AJAX returned error, creating inline');
+                            console.log('MinOrder: AJAX returned error:', response.error || 'success=false');
                             self.createInlineProgressBar(target, insertPosition);
                         }
                     } catch (e) {
-                        console.warn('MinOrder: Error parsing AJAX response', e);
+                        console.warn('MinOrder: Error parsing AJAX response', e, xhr.responseText.substring(0, 200));
                         self.createInlineProgressBar(target, insertPosition);
                     }
                 } else {
