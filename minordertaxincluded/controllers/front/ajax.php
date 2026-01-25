@@ -31,22 +31,29 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
      */
     public function postProcess()
     {
-        $action = Tools::getValue('action');
+        try {
+            $action = (string) Tools::getValue('action');
 
-        switch ($action) {
-            case 'getProgress':
-                $this->getProgress();
-                break;
+            switch ($action) {
+                case 'getProgress':
+                    $this->getProgress();
+                    break;
 
-            case 'getProgressHtml':
-                $this->getProgressHtml();
-                break;
+                case 'getProgressHtml':
+                    $this->getProgressHtml();
+                    break;
 
-            default:
-                $this->ajaxRender(json_encode([
-                    'success' => false,
-                    'error' => 'Invalid action',
-                ]));
+                default:
+                    $this->ajaxRender(json_encode([
+                        'success' => false,
+                        'error' => 'Invalid action',
+                    ]));
+            }
+        } catch (Exception $e) {
+            $this->ajaxRender(json_encode([
+                'success' => false,
+                'error' => $e->getMessage(),
+            ]));
         }
     }
 
@@ -131,25 +138,41 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
 
         // Get suggested products if minimum not reached
         $suggestedProducts = [];
-        if (!$minOrderReached && $showSuggested) {
-            $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+        if (!$minOrderReached && $showSuggested && $this->module) {
+            try {
+                $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+                if (!is_array($suggestedProducts)) {
+                    $suggestedProducts = [];
+                }
+            } catch (Exception $e) {
+                $suggestedProducts = [];
+            }
+        }
+
+        // Get currency sign safely
+        $currencySign = '€';
+        if (isset($this->context->currency) && isset($this->context->currency->sign)) {
+            $currencySign = $this->context->currency->sign;
         }
 
         $this->context->smarty->assign([
-            'min_order_amount' => $minOrderAmount,
-            'cart_total' => $cartTotal,
-            'remaining_amount' => $remaining,
-            'progress_percentage' => $percentage,
-            'min_order_reached' => $minOrderReached,
-            'currency_sign' => $this->context->currency->sign,
+            'min_order_amount' => (float) $minOrderAmount,
+            'cart_total' => (float) $cartTotal,
+            'remaining_amount' => (float) $remaining,
+            'progress_percentage' => (float) $percentage,
+            'min_order_reached' => (bool) $minOrderReached,
+            'currency_sign' => (string) $currencySign,
             'suggested_products' => $suggestedProducts,
-            'show_suggested' => $showSuggested && !empty($suggestedProducts),
+            'show_suggested' => (bool) ($showSuggested && !empty($suggestedProducts)),
         ]);
 
-        $html = $this->module->display(
-            $this->module->getLocalPath() . $this->module->name . '.php',
-            'views/templates/hook/min_order_progress.tpl'
-        );
+        $html = '';
+        if ($this->module) {
+            $html = $this->module->display(
+                $this->module->getLocalPath() . $this->module->name . '.php',
+                'views/templates/hook/min_order_progress.tpl'
+            );
+        }
 
         $this->ajaxRender(json_encode([
             'success' => true,
