@@ -602,7 +602,11 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayShoppingCartFooter($params)
     {
-        return $this->renderMinOrderProgressBarOnce();
+        // Only on cart page, not popup
+        if ($this->isCartPage()) {
+            return $this->renderMinOrderProgressBarForPage();
+        }
+        return '';
     }
 
     /**
@@ -610,15 +614,21 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayShoppingCart($params)
     {
-        return $this->renderMinOrderProgressBarOnce();
+        // Only on cart page, not popup
+        if ($this->isCartPage()) {
+            return $this->renderMinOrderProgressBarForPage();
+        }
+        return '';
     }
 
     /**
-     * Display progress bar in cross-selling area (PS 8.x compatibility)
+     * Display progress bar in cross-selling area (PS 8.x - this is for POPUP, not cart page)
      */
     public function hookDisplayCrossSellingShoppingCart($params)
     {
-        return $this->renderMinOrderProgressBarOnce();
+        // This hook is for the cart modal popup - we skip it
+        // We want the bar on the cart PAGE, not in the popup
+        return '';
     }
 
     /**
@@ -627,9 +637,8 @@ class MinOrderTaxIncluded extends Module
     public function hookDisplayReassurance($params)
     {
         // Only show on cart page
-        $controller = (string) Tools::getValue('controller');
-        if ($controller === 'cart') {
-            return $this->renderMinOrderProgressBarOnce();
+        if ($this->isCartPage()) {
+            return $this->renderMinOrderProgressBarForPage();
         }
         return '';
     }
@@ -640,11 +649,9 @@ class MinOrderTaxIncluded extends Module
     public function hookDisplayAfterBodyOpeningTag($params)
     {
         // Only show on cart page as floating bar
-        $controller = (string) Tools::getValue('controller');
-        if ($controller === 'cart') {
-            $html = $this->renderMinOrderProgressBarOnce();
+        if ($this->isCartPage()) {
+            $html = $this->renderMinOrderProgressBarForPage();
             if (!empty($html)) {
-                // Wrap in a fixed container for visibility
                 return '<div class="minorder-floating-wrapper" style="position:relative;z-index:999;">' . $html . '</div>';
             }
         }
@@ -652,9 +659,18 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Render progress bar only once (prevents duplicates from multiple hooks)
+     * Check if current page is the cart page
      */
-    protected function renderMinOrderProgressBarOnce()
+    protected function isCartPage()
+    {
+        $controller = (string) Tools::getValue('controller');
+        return $controller === 'cart';
+    }
+
+    /**
+     * Render progress bar only once per page (prevents duplicates from multiple hooks)
+     */
+    protected function renderMinOrderProgressBarForPage()
     {
         static $rendered = false;
         if ($rendered) {
