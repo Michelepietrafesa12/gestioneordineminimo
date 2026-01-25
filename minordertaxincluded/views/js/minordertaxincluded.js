@@ -30,6 +30,10 @@
             // If container doesn't exist and we're on cart page, inject it via JS
             if (!this.container && this.minOrderAmount > 0 && this.isCartPage()) {
                 this.injectProgressBarIntoPage();
+            } else if (this.isCheckoutPage()) {
+                // On checkout page, only check minimum order (block if needed)
+                // Don't show any UI - user is already past the cart
+                this.checkMinimumOrderSilent();
             } else {
                 this.checkMinimumOrder();
             }
@@ -40,7 +44,15 @@
          */
         isCartPage: function() {
             var currentController = typeof minorder_current_controller !== 'undefined' ? minorder_current_controller : '';
-            return ['cart', 'order', 'checkout'].indexOf(currentController) !== -1;
+            return currentController === 'cart';
+        },
+
+        /**
+         * Check if current page is order/checkout page
+         */
+        isCheckoutPage: function() {
+            var currentController = typeof minorder_current_controller !== 'undefined' ? minorder_current_controller : '';
+            return ['order', 'checkout', 'orderopc'].indexOf(currentController) !== -1;
         },
 
         /**
@@ -593,6 +605,24 @@
 
             this.updateCheckoutButton(!isMinReached);
             this.updateProgressContainer(cartTotal);
+        },
+
+        /**
+         * Silent check - only update checkout button, no UI
+         * Used on checkout/order pages where we don't want to show the progress bar
+         */
+        checkMinimumOrderSilent: function() {
+            if (this.minOrderAmount <= 0) {
+                return;
+            }
+
+            var cartTotal = this.getCartTotalFromDOM();
+            var isMinReached = cartTotal >= this.minOrderAmount;
+
+            // Only block checkout if not reached - no visual UI
+            if (!isMinReached) {
+                this.updateCheckoutButton(true);
+            }
         },
 
         /**
