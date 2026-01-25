@@ -41,6 +41,7 @@ class MinOrderTaxIncluded extends Module
         return parent::install()
             && $this->registerHook('displayShoppingCart')
             && $this->registerHook('displayShoppingCartFooter')
+            && $this->registerHook('displayCrossSellingShoppingCart')
             && $this->registerHook('actionCartSave')
             && $this->registerHook('displayHeader')
             && $this->registerHook('displayBanner')
@@ -611,6 +612,14 @@ class MinOrderTaxIncluded extends Module
     {
         // Return empty to avoid duplicate display
         return '';
+    }
+
+    /**
+     * Display progress bar in cross-selling area (PS 8.x compatibility)
+     */
+    public function hookDisplayCrossSellingShoppingCart($params)
+    {
+        return $this->renderMinOrderProgressBar();
     }
 
     /**
