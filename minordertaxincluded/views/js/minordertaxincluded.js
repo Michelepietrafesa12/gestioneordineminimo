@@ -89,7 +89,7 @@
         },
 
         /**
-         * Fetch progress bar HTML from server and inject it
+         * Fetch progress data from server and inject progress bar via JS
          */
         fetchAndInjectProgressBar: function(target, insertPosition) {
             var self = this;
@@ -109,12 +109,31 @@
                 if (xhr.status === 200) {
                     try {
                         var response = JSON.parse(xhr.responseText);
-                        if (response.success && response.html) {
+                        if (response.success) {
+                            // Use data to create HTML via JS
+                            var cartTotal = parseFloat(response.cart_total) || 0;
+                            var remaining = parseFloat(response.remaining) || 0;
+                            var percentage = parseFloat(response.percentage) || 0;
+                            var minOrderReached = response.min_order_reached;
+                            var suggestedProducts = response.suggested_products || [];
+                            var showSuggested = response.show_suggested && suggestedProducts.length > 0;
+
+                            // Update currency sign if provided
+                            if (response.currency_sign) {
+                                self.currencySign = response.currency_sign;
+                            }
+
+                            // Create full HTML with suggested products
+                            var html = self.createFullProgressBarWithProductsHtml(
+                                cartTotal, remaining, percentage, minOrderReached,
+                                showSuggested, suggestedProducts
+                            );
+
                             // Create wrapper and insert
                             var wrapper = document.createElement('div');
                             wrapper.className = 'minorder-injected-wrapper';
                             wrapper.style.cssText = 'margin: 20px 0; clear: both;';
-                            wrapper.innerHTML = response.html;
+                            wrapper.innerHTML = html;
 
                             if (insertPosition === 'beforebegin') {
                                 target.parentNode.insertBefore(wrapper, target);
@@ -128,11 +147,11 @@
                             self.container = document.getElementById('minorder-progress-container');
 
                             // Update checkout buttons
-                            self.updateCheckoutButton(!response.min_order_reached);
+                            self.updateCheckoutButton(!minOrderReached);
 
-                            console.log('MinOrder: Progress bar injected successfully');
+                            console.log('MinOrder: Progress bar injected with ' + suggestedProducts.length + ' suggested products');
                         } else {
-                            console.log('MinOrder: AJAX returned no HTML, creating inline');
+                            console.log('MinOrder: AJAX returned error, creating inline');
                             self.createInlineProgressBar(target, insertPosition);
                         }
                     } catch (e) {
@@ -150,7 +169,7 @@
                 self.createInlineProgressBar(target, insertPosition);
             };
 
-            xhr.send('action=getProgressHtml&ajax=1');
+            xhr.send('action=getProgressData&ajax=1');
         },
 
         /**
@@ -215,6 +234,120 @@
 
             html += '</div>';
             return html;
+        },
+
+        /**
+         * Create full progress bar HTML with suggested products
+         */
+        createFullProgressBarWithProductsHtml: function(cartTotal, remaining, percentage, minOrderReached, showSuggested, suggestedProducts) {
+            var html = '<div class="minorder-progress-container" id="minorder-progress-container" ' +
+                'data-min-order="' + this.minOrderAmount + '" ' +
+                'data-cart-total="' + cartTotal + '" ' +
+                'data-remaining="' + remaining + '">';
+
+            if (minOrderReached) {
+                html += '<div class="minorder-success">' +
+                    '<span class="minorder-icon">&#10003;</span>' +
+                    '<span>Ordine minimo raggiunto! Puoi procedere al checkout.</span>' +
+                    '</div>';
+            } else {
+                html += '<div class="minorder-info">' +
+                    '<p class="minorder-message">' +
+                    '<span class="minorder-icon minorder-icon-warning">&#9888;</span>' +
+                    '<span>Ordine minimo: <strong>' + this.formatCurrency(this.minOrderAmount) + '</strong> &mdash; ' +
+                    'Ti mancano <strong class="minorder-remaining-amount">' + this.formatCurrency(remaining) + '</strong></span>' +
+                    '</p></div>' +
+                    '<div class="minorder-progress-bar-wrapper">' +
+                    '<div class="minorder-progress-bar">' +
+                    '<div class="minorder-progress-fill" style="width: ' + percentage + '%;">' +
+                    '<span class="minorder-progress-text">' + Math.round(percentage) + '%</span>' +
+                    '</div></div>' +
+                    '<div class="minorder-progress-labels">' +
+                    '<span class="minorder-current">' + this.formatCurrency(cartTotal) + '</span>' +
+                    '<span class="minorder-target">' + this.formatCurrency(this.minOrderAmount) + '</span>' +
+                    '</div></div>';
+
+                // Add suggested products
+                if (showSuggested && suggestedProducts && suggestedProducts.length > 0) {
+                    html += '<div class="minorder-suggested-products">' +
+                        '<h4 class="minorder-suggested-title">' +
+                        '<span class="minorder-icon">&#128722;</span> ' +
+                        'Aggiungi questi prodotti per raggiungere l\'ordine minimo:' +
+                        '</h4>' +
+                        '<div class="minorder-suggested-grid">';
+
+                    for (var i = 0; i < suggestedProducts.length; i++) {
+                        var product = suggestedProducts[i];
+                        var itemClass = 'minorder-suggested-item';
+                        if (product.reaches_minimum) {
+                            itemClass += ' minorder-reaches-min';
+                        }
+
+                        html += '<div class="' + itemClass + '">' +
+                            '<a href="' + this.escapeHtml(product.link) + '" class="minorder-suggested-link">';
+
+                        if (product.image_url) {
+                            html += '<div class="minorder-suggested-image">' +
+                                '<img src="' + this.escapeHtml(product.image_url) + '" alt="' + this.escapeHtml(product.name) + '" loading="lazy">';
+
+                            if (product.reaches_minimum) {
+                                html += '<span class="minorder-badge-reaches">Raggiungi la soglia!</span>';
+                            }
+                            if (product.is_bestseller) {
+                                html += '<span class="minorder-badge-bestseller">Più acquistato</span>';
+                            }
+                            html += '</div>';
+                        }
+
+                        html += '<div class="minorder-suggested-info">' +
+                            '<span class="minorder-suggested-name">' + this.escapeHtml(this.truncate(product.name, 40)) + '</span>' +
+                            '<div class="minorder-suggested-prices">';
+
+                        if (product.has_discount) {
+                            html += '<span class="minorder-suggested-price-regular">' + this.escapeHtml(product.regular_price_formatted) + '</span>';
+                        }
+                        html += '<span class="minorder-suggested-price">' + this.escapeHtml(product.price_formatted) + '</span>' +
+                            '</div></div></a>' +
+                            '<button type="button" class="minorder-add-btn" ' +
+                            'data-id-product="' + product.id_product + '" ' +
+                            'data-id-product-attribute="0" ' +
+                            'data-minimal-quantity="1" ' +
+                            'title="Aggiungi al carrello">' +
+                            '<span class="minorder-icon">&#128722;</span> ' +
+                            '<span class="minorder-add-text">Aggiungi</span>' +
+                            '</button></div>';
+                    }
+
+                    html += '</div></div>';
+                }
+            }
+
+            html += '</div>';
+            return html;
+        },
+
+        /**
+         * Escape HTML special characters
+         */
+        escapeHtml: function(text) {
+            if (!text) return '';
+            var map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+        },
+
+        /**
+         * Truncate text to specified length
+         */
+        truncate: function(text, length) {
+            if (!text) return '';
+            if (text.length <= length) return text;
+            return text.substring(0, length) + '...';
         },
 
         /**

@@ -43,6 +43,10 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                     $this->getProgressHtml();
                     break;
 
+                case 'getProgressData':
+                    $this->getProgressData();
+                    break;
+
                 default:
                     $this->ajaxRender(json_encode([
                         'success' => false,
@@ -103,6 +107,65 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'min_order_amount' => $minOrderAmount,
             'min_order_remaining' => round($minOrderRemaining, 2),
             'min_order_reached' => $minOrderReached,
+        ]));
+    }
+
+    /**
+     * Get all progress data including suggested products as JSON
+     * This is for full JS-based rendering
+     */
+    protected function getProgressData()
+    {
+        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+        $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
+        $showSuggested = (bool) Configuration::get('MINORDER_SHOW_SUGGESTED');
+
+        $cart = $this->context->cart;
+
+        $cartTotal = 0;
+        if (Validate::isLoadedObject($cart)) {
+            $cartTotal = (float) $cart->getOrderTotal($useTaxIncl, Cart::ONLY_PRODUCTS);
+        }
+
+        $remaining = max(0, $minOrderAmount - $cartTotal);
+        $percentage = $minOrderAmount > 0 ? min(100, ($cartTotal / $minOrderAmount) * 100) : 0;
+        $minOrderReached = $minOrderAmount <= 0 || $cartTotal >= $minOrderAmount;
+
+        // Get currency sign
+        $currencySign = '€';
+        if (isset($this->context->currency) && isset($this->context->currency->sign)) {
+            $currencySign = $this->context->currency->sign;
+        }
+
+        // Get suggested products
+        $suggestedProducts = [];
+        if (!$minOrderReached && $showSuggested) {
+            if ($this->module && method_exists($this->module, 'getSuggestedProducts')) {
+                try {
+                    $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+                    if (!is_array($suggestedProducts)) {
+                        $suggestedProducts = [];
+                    }
+                } catch (Exception $e) {
+                    $suggestedProducts = [];
+                }
+            }
+
+            if (empty($suggestedProducts)) {
+                $suggestedProducts = $this->getSuggestedProductsFallback($remaining, $cart, $useTaxIncl);
+            }
+        }
+
+        $this->ajaxRender(json_encode([
+            'success' => true,
+            'min_order_amount' => round($minOrderAmount, 2),
+            'cart_total' => round($cartTotal, 2),
+            'remaining' => round($remaining, 2),
+            'percentage' => round($percentage, 2),
+            'min_order_reached' => $minOrderReached,
+            'currency_sign' => $currencySign,
+            'show_suggested' => $showSuggested && !empty($suggestedProducts),
+            'suggested_products' => $suggestedProducts,
         ]));
     }
 
