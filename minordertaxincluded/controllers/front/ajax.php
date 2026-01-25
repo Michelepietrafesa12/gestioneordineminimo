@@ -259,37 +259,36 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
      */
     protected function getSuggestedProductsFallback($remaining, $cart, $useTaxIncl)
     {
-        $idLang = $this->context->language->id;
+        $idLang = (int) $this->context->language->id;
+        $idShop = (int) $this->context->shop->id;
         $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
         $count = max(1, min(8, $count ?: 4));
 
         // Get cart product IDs to exclude
-        $cartProductIds = [];
+        $cartProductIds = [0]; // Start with 0 to avoid empty IN clause
         if (Validate::isLoadedObject($cart)) {
             $cartProducts = $cart->getProducts();
             foreach ($cartProducts as $product) {
                 $cartProductIds[] = (int) $product['id_product'];
             }
         }
+        $excludeIds = implode(',', $cartProductIds);
 
-        // Get bestseller product IDs
-        $excludeIds = implode(',', array_map('intval', array_merge([0], $cartProductIds)));
-
-        $sql = new DbQuery();
-        $sql->select('DISTINCT od.product_id as id_product');
-        $sql->from('order_detail', 'od');
-        $sql->innerJoin('orders', 'o', 'o.id_order = od.id_order');
-        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = od.product_id AND ps.id_shop = ' . (int) $this->context->shop->id);
-        $sql->where('o.valid = 1');
-        $sql->where('ps.active = 1');
-        $sql->where('od.product_id NOT IN (' . $excludeIds . ')');
-        $sql->groupBy('od.product_id');
-        $sql->orderBy('SUM(od.product_quantity) DESC');
-        $sql->limit($count * 2);
+        // Get bestseller product IDs using raw SQL
+        $sql = 'SELECT DISTINCT od.product_id as id_product
+                FROM `' . _DB_PREFIX_ . 'order_detail` od
+                INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
+                INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = od.product_id AND ps.id_shop = ' . $idShop . '
+                WHERE o.valid = 1
+                AND ps.active = 1
+                AND od.product_id NOT IN (' . $excludeIds . ')
+                GROUP BY od.product_id
+                ORDER BY SUM(od.product_quantity) DESC
+                LIMIT ' . ($count * 2);
 
         $results = Db::getInstance()->executeS($sql);
         $productIds = [];
-        if ($results) {
+        if ($results && is_array($results)) {
             foreach ($results as $row) {
                 $productIds[] = (int) $row['id_product'];
             }
@@ -297,17 +296,16 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
 
         // If no bestsellers, get newest products
         if (empty($productIds)) {
-            $sql = new DbQuery();
-            $sql->select('p.id_product');
-            $sql->from('product', 'p');
-            $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $this->context->shop->id);
-            $sql->where('ps.active = 1');
-            $sql->where('p.id_product NOT IN (' . $excludeIds . ')');
-            $sql->orderBy('p.date_add DESC');
-            $sql->limit($count);
+            $sql = 'SELECT p.id_product
+                    FROM `' . _DB_PREFIX_ . 'product` p
+                    INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = p.id_product AND ps.id_shop = ' . $idShop . '
+                    WHERE ps.active = 1
+                    AND p.id_product NOT IN (' . $excludeIds . ')
+                    ORDER BY p.date_add DESC
+                    LIMIT ' . $count;
 
             $results = Db::getInstance()->executeS($sql);
-            if ($results) {
+            if ($results && is_array($results)) {
                 foreach ($results as $row) {
                     $productIds[] = (int) $row['id_product'];
                 }
@@ -371,28 +369,28 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
      */
     protected function getImageTypeFallback()
     {
-        // For PS 8.x, query database
+        // For PS 8.x, query database using raw SQL
         if (version_compare(_PS_VERSION_, '8.0.0', '>=')) {
-            $sql = new DbQuery();
-            $sql->select('name');
-            $sql->from('image_type');
-            $sql->where('name LIKE \'%home%\'');
-            $sql->limit(1);
-
-            $result = Db::getInstance()->getValue($sql);
+            // Try to find 'home' image type
+            $result = Db::getInstance()->getValue(
+                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` WHERE name LIKE "%home%" LIMIT 1'
+            );
             if ($result) {
                 return (string) $result;
             }
 
             // Try getting any small image type
-            $sql = new DbQuery();
-            $sql->select('name');
-            $sql->from('image_type');
-            $sql->where('width <= 300');
-            $sql->orderBy('width DESC');
-            $sql->limit(1);
+            $result = Db::getInstance()->getValue(
+                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` WHERE width <= 300 ORDER BY width DESC LIMIT 1'
+            );
+            if ($result) {
+                return (string) $result;
+            }
 
-            $result = Db::getInstance()->getValue($sql);
+            // Last resort: get any image type
+            $result = Db::getInstance()->getValue(
+                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` LIMIT 1'
+            );
             return $result ? (string) $result : 'home_default';
         }
 
