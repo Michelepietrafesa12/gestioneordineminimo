@@ -719,15 +719,25 @@ class MinOrderTaxIncluded extends Module
                 'show_suggested' => (bool) ($showSuggested && !empty($suggestedProducts)),
             ]);
 
+            // DEBUG: Render HTML directly without template
+            $html = '<div style="background:#28a745;color:white;padding:15px;margin:15px 0;border-radius:5px;">';
+            $html .= '<strong>Ordine Minimo: ' . number_format($minOrderAmount, 2, ',', '.') . '€</strong><br>';
+            $html .= 'Totale Carrello: ' . number_format($cartTotal, 2, ',', '.') . '€<br>';
+            $html .= 'Mancano: ' . number_format($remaining, 2, ',', '.') . '€<br>';
+            $html .= 'Progresso: ' . number_format($percentage, 0) . '%';
+            $html .= '</div>';
+            return $html;
+
+            /* ORIGINAL CODE - COMMENTED FOR DEBUG
             $templatePath = 'views/templates/hook/min_order_progress.tpl';
             $output = $this->display(__FILE__, $templatePath);
 
-            // DEBUG: Check if template rendered
             if (empty($output)) {
-                return '<div style="background:orange;color:black;padding:10px;">DEBUG: Template returned empty. Path: ' . $this->getLocalPath() . $templatePath . '</div>';
+                return '<div style="background:orange;color:black;padding:10px;">DEBUG: Template returned empty.</div>';
             }
 
             return $output;
+            */
         } catch (Exception $e) {
             // Log error and return empty to prevent breaking the page
             PrestaShopLogger::addLog(
