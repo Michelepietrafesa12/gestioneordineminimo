@@ -676,6 +676,9 @@ class MinOrderTaxIncluded extends Module
         try {
             $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
 
+            // DEBUG: Remove this after testing
+            return '<div style="background:red;color:white;padding:10px;margin:10px 0;">DEBUG: Min Order Amount = ' . $minOrderAmount . ' | Cart Total = ' . $this->getCartTotalTaxIncluded() . '</div>';
+
             if ($minOrderAmount <= 0) {
                 return '';
             }
