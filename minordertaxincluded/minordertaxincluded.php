@@ -637,36 +637,58 @@ class MinOrderTaxIncluded extends Module
      */
     protected function renderMinOrderProgressBar()
     {
-        $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
+        try {
+            $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
 
-        if ($minOrderAmount <= 0) {
+            if ($minOrderAmount <= 0) {
+                return '';
+            }
+
+            $cartTotal = $this->getCartTotalTaxIncluded();
+            $remaining = max(0, $minOrderAmount - $cartTotal);
+            $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
+            $minOrderReached = $cartTotal >= $minOrderAmount;
+
+            // Get suggested products if minimum not reached
+            $suggestedProducts = [];
+            $showSuggested = (bool) Configuration::get('MINORDER_SHOW_SUGGESTED');
+            if (!$minOrderReached && $showSuggested) {
+                $suggestedProducts = $this->getSuggestedProducts($remaining);
+                // Ensure it's always an array
+                if (!is_array($suggestedProducts)) {
+                    $suggestedProducts = [];
+                }
+            }
+
+            // Get currency sign safely
+            $currencySign = '€';
+            if (isset($this->context->currency) && isset($this->context->currency->sign)) {
+                $currencySign = $this->context->currency->sign;
+            }
+
+            $this->context->smarty->assign([
+                'min_order_amount' => (float) $minOrderAmount,
+                'cart_total' => (float) $cartTotal,
+                'remaining_amount' => (float) $remaining,
+                'progress_percentage' => (float) $percentage,
+                'min_order_reached' => (bool) $minOrderReached,
+                'currency_sign' => (string) $currencySign,
+                'suggested_products' => $suggestedProducts,
+                'show_suggested' => (bool) ($showSuggested && !empty($suggestedProducts)),
+            ]);
+
+            return $this->display(__FILE__, 'views/templates/hook/min_order_progress.tpl');
+        } catch (Exception $e) {
+            // Log error and return empty to prevent breaking the page
+            PrestaShopLogger::addLog(
+                'MinOrderTaxIncluded error: ' . $e->getMessage(),
+                3,
+                null,
+                'Module',
+                $this->id
+            );
             return '';
         }
-
-        $cartTotal = $this->getCartTotalTaxIncluded();
-        $remaining = max(0, $minOrderAmount - $cartTotal);
-        $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
-        $minOrderReached = $cartTotal >= $minOrderAmount;
-
-        // Get suggested products if minimum not reached
-        $suggestedProducts = [];
-        $showSuggested = (bool) Configuration::get('MINORDER_SHOW_SUGGESTED');
-        if (!$minOrderReached && $showSuggested) {
-            $suggestedProducts = $this->getSuggestedProducts($remaining);
-        }
-
-        $this->context->smarty->assign([
-            'min_order_amount' => $minOrderAmount,
-            'cart_total' => $cartTotal,
-            'remaining_amount' => $remaining,
-            'progress_percentage' => $percentage,
-            'min_order_reached' => $minOrderReached,
-            'currency_sign' => $this->context->currency->sign,
-            'suggested_products' => $suggestedProducts,
-            'show_suggested' => $showSuggested && !empty($suggestedProducts),
-        ]);
-
-        return $this->display(__FILE__, 'views/templates/hook/min_order_progress.tpl');
     }
 
     /**

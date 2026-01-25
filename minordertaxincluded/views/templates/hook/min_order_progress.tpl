@@ -48,7 +48,7 @@
         </div>
 
         {* Suggested products section *}
-        {if $show_suggested && $suggested_products|count > 0}
+        {if $show_suggested && !empty($suggested_products)}
             <div class="minorder-suggested-products">
                 <h4 class="minorder-suggested-title">
                     <span class="minorder-icon">&#128722;</span>
