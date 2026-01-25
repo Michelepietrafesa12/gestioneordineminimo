@@ -435,13 +435,19 @@ class MinOrderTaxIncluded extends Module
 
         // Pass configuration to JavaScript, including current page info
         $controller = Tools::getValue('controller');
+        // Get currency sign safely
+        $currencySign = '€';
+        if (isset($this->context->currency) && isset($this->context->currency->sign)) {
+            $currencySign = $this->context->currency->sign;
+        }
+
         Media::addJsDef([
             'minorder_ajax_url' => $this->context->link->getModuleLink($this->name, 'ajax'),
             'minorder_free_shipping' => (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT'),
             'minorder_min_order' => (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT'),
-            'minorder_currency_sign' => $this->context->currency->sign,
-            'minorder_cart_total' => $this->getCartTotalTaxIncluded(),
-            'minorder_current_controller' => $controller,
+            'minorder_currency_sign' => $currencySign,
+            'minorder_cart_total' => (float) $this->getCartTotalTaxIncluded(),
+            'minorder_current_controller' => (string) $controller,
         ]);
 
         // Add dynamic color CSS
@@ -675,9 +681,6 @@ class MinOrderTaxIncluded extends Module
     {
         try {
             $minOrderAmount = (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT');
-
-            // DEBUG: Remove this after testing
-            return '<div style="background:red;color:white;padding:10px;margin:10px 0;">DEBUG: Min Order Amount = ' . $minOrderAmount . ' | Cart Total = ' . $this->getCartTotalTaxIncluded() . '</div>';
 
             if ($minOrderAmount <= 0) {
                 return '';
