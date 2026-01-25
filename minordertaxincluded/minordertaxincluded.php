@@ -698,17 +698,12 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Display progress bar after body opening tag (fallback)
+     * DISABLED: Other hooks (displayShoppingCart, displayShoppingCartFooter) handle this properly
+     * This hook was causing the progress bar to appear at the top of the page instead of in the cart area
      */
     public function hookDisplayAfterBodyOpeningTag($params)
     {
-        // Only show on cart page - NOT on checkout/order pages
-        $controller = (string) Tools::getValue('controller');
-        if ($controller === 'cart') {
-            $html = $this->renderMinOrderProgressBarForPage();
-            if (!empty($html)) {
-                return '<div class="minorder-floating-wrapper" style="position:relative;z-index:999;">' . $html . '</div>';
-            }
-        }
+        // Disabled - let other cart hooks handle display in the correct position
         return '';
     }
 
