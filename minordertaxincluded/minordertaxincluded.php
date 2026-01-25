@@ -602,11 +602,7 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayShoppingCartFooter($params)
     {
-        // Only on cart page, not popup
-        if ($this->isCartPage()) {
-            return $this->renderMinOrderProgressBarForPage();
-        }
-        return '';
+        return $this->renderMinOrderProgressBarForPage();
     }
 
     /**
@@ -614,11 +610,7 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayShoppingCart($params)
     {
-        // Only on cart page, not popup
-        if ($this->isCartPage()) {
-            return $this->renderMinOrderProgressBarForPage();
-        }
-        return '';
+        return $this->renderMinOrderProgressBarForPage();
     }
 
     /**
@@ -627,7 +619,6 @@ class MinOrderTaxIncluded extends Module
     public function hookDisplayCrossSellingShoppingCart($params)
     {
         // This hook is for the cart modal popup - we skip it
-        // We want the bar on the cart PAGE, not in the popup
         return '';
     }
 
@@ -636,11 +627,7 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayReassurance($params)
     {
-        // Only show on cart page
-        if ($this->isCartPage()) {
-            return $this->renderMinOrderProgressBarForPage();
-        }
-        return '';
+        return $this->renderMinOrderProgressBarForPage();
     }
 
     /**
@@ -648,8 +635,9 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayAfterBodyOpeningTag($params)
     {
-        // Only show on cart page as floating bar
-        if ($this->isCartPage()) {
+        // Only show on cart-related pages
+        $controller = (string) Tools::getValue('controller');
+        if (in_array($controller, ['cart', 'order', 'checkout'])) {
             $html = $this->renderMinOrderProgressBarForPage();
             if (!empty($html)) {
                 return '<div class="minorder-floating-wrapper" style="position:relative;z-index:999;">' . $html . '</div>';
@@ -664,7 +652,7 @@ class MinOrderTaxIncluded extends Module
     protected function isCartPage()
     {
         $controller = (string) Tools::getValue('controller');
-        return $controller === 'cart';
+        return in_array($controller, ['cart', 'order', 'checkout']);
     }
 
     /**
