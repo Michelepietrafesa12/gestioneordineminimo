@@ -42,6 +42,8 @@ class MinOrderTaxIncluded extends Module
             && $this->registerHook('displayShoppingCart')
             && $this->registerHook('displayShoppingCartFooter')
             && $this->registerHook('displayCrossSellingShoppingCart')
+            && $this->registerHook('displayReassurance')
+            && $this->registerHook('displayAfterBodyOpeningTag')
             && $this->registerHook('actionCartSave')
             && $this->registerHook('displayHeader')
             && $this->registerHook('displayBanner')
@@ -617,6 +619,36 @@ class MinOrderTaxIncluded extends Module
     public function hookDisplayCrossSellingShoppingCart($params)
     {
         return $this->renderMinOrderProgressBarOnce();
+    }
+
+    /**
+     * Display progress bar in reassurance area (Classic theme)
+     */
+    public function hookDisplayReassurance($params)
+    {
+        // Only show on cart page
+        $controller = (string) Tools::getValue('controller');
+        if ($controller === 'cart') {
+            return $this->renderMinOrderProgressBarOnce();
+        }
+        return '';
+    }
+
+    /**
+     * Display progress bar after body opening tag (fallback)
+     */
+    public function hookDisplayAfterBodyOpeningTag($params)
+    {
+        // Only show on cart page as floating bar
+        $controller = (string) Tools::getValue('controller');
+        if ($controller === 'cart') {
+            $html = $this->renderMinOrderProgressBarOnce();
+            if (!empty($html)) {
+                // Wrap in a fixed container for visibility
+                return '<div class="minorder-floating-wrapper" style="position:relative;z-index:999;">' . $html . '</div>';
+            }
+        }
+        return '';
     }
 
     /**
