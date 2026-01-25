@@ -27,12 +27,26 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
     }
 
     /**
+     * Allowed AJAX actions (whitelist for security)
+     */
+    private static $allowedActions = ['getProgress', 'getProgressHtml', 'getProgressData'];
+
+    /**
      * Process AJAX request
      */
     public function postProcess()
     {
         try {
             $action = (string) Tools::getValue('action');
+
+            // Security: Validate action against whitelist
+            if (!in_array($action, self::$allowedActions, true)) {
+                $this->ajaxRender(json_encode([
+                    'success' => false,
+                    'error' => 'Invalid action',
+                ]));
+                return;
+            }
 
             switch ($action) {
                 case 'getProgress':
@@ -46,17 +60,19 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
                 case 'getProgressData':
                     $this->getProgressData();
                     break;
-
-                default:
-                    $this->ajaxRender(json_encode([
-                        'success' => false,
-                        'error' => 'Invalid action',
-                    ]));
             }
         } catch (Exception $e) {
+            // Log error for debugging (don't expose details to client)
+            PrestaShopLogger::addLog(
+                'MinOrderTaxIncluded AJAX error: ' . $e->getMessage(),
+                3,
+                null,
+                'Module',
+                null
+            );
             $this->ajaxRender(json_encode([
                 'success' => false,
-                'error' => $e->getMessage(),
+                'error' => 'An error occurred',
             ]));
         }
     }
@@ -137,22 +153,24 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             $currencySign = $this->context->currency->sign;
         }
 
-        // Get suggested products
+        // Get suggested products from module (no duplicate fallback code)
         $suggestedProducts = [];
-        if (!$minOrderReached && $showSuggested) {
-            if ($this->module && method_exists($this->module, 'getSuggestedProducts')) {
-                try {
-                    $suggestedProducts = $this->module->getSuggestedProducts($remaining);
-                    if (!is_array($suggestedProducts)) {
-                        $suggestedProducts = [];
-                    }
-                } catch (Exception $e) {
+        if (!$minOrderReached && $showSuggested && $this->module) {
+            try {
+                $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+                if (!is_array($suggestedProducts)) {
                     $suggestedProducts = [];
                 }
-            }
-
-            if (empty($suggestedProducts)) {
-                $suggestedProducts = $this->getSuggestedProductsFallback($remaining, $cart, $useTaxIncl);
+            } catch (Exception $e) {
+                // Log error but don't expose to client
+                PrestaShopLogger::addLog(
+                    'MinOrderTaxIncluded getSuggestedProducts error: ' . $e->getMessage(),
+                    2,
+                    null,
+                    'Module',
+                    null
+                );
+                $suggestedProducts = [];
             }
         }
 
@@ -199,24 +217,16 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         $percentage = min(100, ($cartTotal / $minOrderAmount) * 100);
         $minOrderReached = $cartTotal >= $minOrderAmount;
 
-        // Get suggested products if minimum not reached
+        // Get suggested products if minimum not reached (from module only)
         $suggestedProducts = [];
-        if (!$minOrderReached && $showSuggested) {
-            // Try to get from module
-            if ($this->module && method_exists($this->module, 'getSuggestedProducts')) {
-                try {
-                    $suggestedProducts = $this->module->getSuggestedProducts($remaining);
-                    if (!is_array($suggestedProducts)) {
-                        $suggestedProducts = [];
-                    }
-                } catch (Exception $e) {
+        if (!$minOrderReached && $showSuggested && $this->module) {
+            try {
+                $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+                if (!is_array($suggestedProducts)) {
                     $suggestedProducts = [];
                 }
-            }
-
-            // Fallback: get suggested products directly
-            if (empty($suggestedProducts)) {
-                $suggestedProducts = $this->getSuggestedProductsFallback($remaining, $cart, $useTaxIncl);
+            } catch (Exception $e) {
+                $suggestedProducts = [];
             }
         }
 
@@ -254,147 +264,4 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
         ]));
     }
 
-    /**
-     * Fallback method to get suggested products directly in AJAX controller
-     */
-    protected function getSuggestedProductsFallback($remaining, $cart, $useTaxIncl)
-    {
-        try {
-            $idLang = (int) $this->context->language->id;
-            $idShop = (int) $this->context->shop->id;
-            $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
-            $count = max(1, min(8, $count ?: 4));
-            $limit = (int) ($count * 2);
-
-            // Get cart product IDs to exclude
-            $cartProductIds = [0]; // Start with 0 to avoid empty IN clause
-            if (Validate::isLoadedObject($cart)) {
-                $cartProducts = $cart->getProducts();
-                if (is_array($cartProducts)) {
-                    foreach ($cartProducts as $product) {
-                        $cartProductIds[] = (int) $product['id_product'];
-                    }
-                }
-            }
-            $excludeIds = implode(',', $cartProductIds);
-
-            // Get bestseller product IDs using raw SQL
-            $productIds = [];
-
-            try {
-                $sql = 'SELECT DISTINCT od.product_id as id_product
-                        FROM `' . _DB_PREFIX_ . 'order_detail` od
-                        INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
-                        INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = od.product_id AND ps.id_shop = ' . $idShop . '
-                        WHERE o.valid = 1
-                        AND ps.active = 1
-                        AND od.product_id NOT IN (' . $excludeIds . ')
-                        GROUP BY od.product_id
-                        ORDER BY SUM(od.product_quantity) DESC
-                        LIMIT ' . $limit;
-
-                $results = Db::getInstance()->executeS($sql);
-                if ($results && is_array($results)) {
-                    foreach ($results as $row) {
-                        $productIds[] = (int) $row['id_product'];
-                    }
-                }
-            } catch (Exception $e) {
-                // Ignore bestseller query error
-            }
-
-            // If no bestsellers, get newest products
-            if (empty($productIds)) {
-                try {
-                    $sql = 'SELECT p.id_product
-                            FROM `' . _DB_PREFIX_ . 'product` p
-                            INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = p.id_product AND ps.id_shop = ' . $idShop . '
-                            WHERE ps.active = 1
-                            AND p.id_product NOT IN (' . $excludeIds . ')
-                            ORDER BY p.date_add DESC
-                            LIMIT ' . $count;
-
-                    $results = Db::getInstance()->executeS($sql);
-                    if ($results && is_array($results)) {
-                        foreach ($results as $row) {
-                            $productIds[] = (int) $row['id_product'];
-                        }
-                    }
-                } catch (Exception $e) {
-                    // Ignore newest products query error
-                }
-            }
-
-            // Build product data
-            $suggestedProducts = [];
-            foreach ($productIds as $productId) {
-                if (count($suggestedProducts) >= $count) {
-                    break;
-                }
-
-                try {
-                    $product = new Product((int) $productId, true, $idLang);
-                    if (!Validate::isLoadedObject($product)) {
-                        continue;
-                    }
-
-                    $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
-                    if ($price <= 0) {
-                        continue;
-                    }
-
-                    $regularPrice = $useTaxIncl
-                        ? $product->getPrice(true, null, 6, null, false, false)
-                        : $product->getPrice(false, null, 6, null, false, false);
-
-                    $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
-
-                    // Get image URL without SQL query - use default type
-                    $imageUrl = '';
-                    $cover = Product::getCover($product->id);
-                    if ($cover && isset($cover['id_image'])) {
-                        $imageUrl = $this->context->link->getImageLink(
-                            (string) $product->link_rewrite,
-                            $cover['id_image'],
-                            'home_default'
-                        );
-                    }
-
-                    $suggestedProducts[] = [
-                        'id_product' => $product->id,
-                        'name' => $product->name,
-                        'price' => $price,
-                        'price_formatted' => Tools::displayPrice($price),
-                        'regular_price' => $regularPrice,
-                        'regular_price_formatted' => Tools::displayPrice($regularPrice),
-                        'has_discount' => $hasDiscount,
-                        'link' => $this->context->link->getProductLink($product),
-                        'image_url' => $imageUrl,
-                        'reaches_minimum' => ($price >= $remaining),
-                        'is_bestseller' => true,
-                    ];
-                } catch (Exception $e) {
-                    // Skip this product if any error
-                    continue;
-                }
-            }
-
-            return $suggestedProducts;
-
-        } catch (Exception $e) {
-            // If anything fails, return empty array
-            return [];
-        }
-    }
-
-    /**
-     * Get image type name
-     * Returns hardcoded default to avoid any SQL issues
-     */
-    protected function getImageTypeFallback()
-    {
-        // Simply return home_default - it's the standard PrestaShop image type
-        // This avoids any SQL queries that could cause issues
-        return 'home_default';
-    }
 }

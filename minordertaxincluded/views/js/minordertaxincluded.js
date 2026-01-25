@@ -359,11 +359,35 @@
 
         /**
          * Truncate text to specified length
+         * Note: Output is NOT escaped - always use escapeHtml() after this
          */
         truncate: function(text, length) {
             if (!text) return '';
+            text = String(text);
             if (text.length <= length) return text;
             return text.substring(0, length) + '...';
+        },
+
+        /**
+         * Truncate and escape text safely (combines truncate + escapeHtml)
+         */
+        truncateAndEscape: function(text, length) {
+            return this.escapeHtml(this.truncate(text, length));
+        },
+
+        /**
+         * Debounce function to limit frequency of calls
+         */
+        debounce: function(func, wait) {
+            var timeout;
+            return function() {
+                var context = this;
+                var args = arguments;
+                clearTimeout(timeout);
+                timeout = setTimeout(function() {
+                    func.apply(context, args);
+                }, wait);
+            };
         },
 
         /**
@@ -372,14 +396,20 @@
         bindEvents: function() {
             var self = this;
 
+            // Create debounced version of cart update handler (300ms)
+            // This prevents multiple AJAX calls when cart updates rapidly
+            var debouncedCartUpdate = this.debounce(function(event) {
+                self.onCartUpdate(event);
+            }, 300);
+
             // Listen for PrestaShop cart update events
             if (typeof prestashop !== 'undefined') {
                 prestashop.on('updateCart', function(event) {
-                    self.onCartUpdate(event);
+                    debouncedCartUpdate(event);
                 });
 
                 prestashop.on('updatedCart', function(event) {
-                    self.onCartUpdate(event);
+                    debouncedCartUpdate(event);
                     // Inject progress bar into modal after cart update
                     setTimeout(function() {
                         self.injectIntoModal();
@@ -1096,7 +1126,7 @@
         MinOrderProgress.bindSuggestedProductsForms();
     }
 
-    // Make available globally for debugging
-    window.MinOrderProgress = MinOrderProgress;
+    // Security: Do NOT expose globally in production
+    // For debugging only, uncomment: window.MinOrderProgress = MinOrderProgress;
 
 })();

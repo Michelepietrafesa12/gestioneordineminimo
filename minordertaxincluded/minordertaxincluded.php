@@ -123,17 +123,18 @@ class MinOrderTaxIncluded extends Module
 
         // Save color settings (separate action)
         if (Tools::isSubmit('submitMinOrderColors')) {
-            $colorPrimary = Tools::getValue('MINORDER_COLOR_PRIMARY', '#28a745');
-            $colorSecondary = Tools::getValue('MINORDER_COLOR_SECONDARY', '#ff6b35');
-            $colorWarning = Tools::getValue('MINORDER_COLOR_WARNING', '#ffc107');
-            $colorProgressBg = Tools::getValue('MINORDER_COLOR_PROGRESS_BG', '#e9ecef');
-            $colorButton = Tools::getValue('MINORDER_COLOR_BUTTON', '#28a745');
-            $colorBestseller = Tools::getValue('MINORDER_COLOR_BESTSELLER', '#dc3545');
-            $colorPriceOld = Tools::getValue('MINORDER_COLOR_PRICE_OLD', '#999999');
-            $colorText = Tools::getValue('MINORDER_COLOR_TEXT', '#333333');
-            $colorCardBg = Tools::getValue('MINORDER_COLOR_CARD_BG', '#ffffff');
-            $colorCardBorder = Tools::getValue('MINORDER_COLOR_CARD_BORDER', '#eeeeee');
-            $colorButtonText = Tools::getValue('MINORDER_COLOR_BUTTON_TEXT', '#ffffff');
+            // Validate and sanitize all color inputs to prevent XSS
+            $colorPrimary = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_PRIMARY'), '#28a745');
+            $colorSecondary = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_SECONDARY'), '#ff6b35');
+            $colorWarning = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_WARNING'), '#ffc107');
+            $colorProgressBg = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_PROGRESS_BG'), '#e9ecef');
+            $colorButton = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_BUTTON'), '#28a745');
+            $colorBestseller = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_BESTSELLER'), '#dc3545');
+            $colorPriceOld = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_PRICE_OLD'), '#999999');
+            $colorText = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_TEXT'), '#333333');
+            $colorCardBg = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_CARD_BG'), '#ffffff');
+            $colorCardBorder = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_CARD_BORDER'), '#eeeeee');
+            $colorButtonText = $this->sanitizeHexColor(Tools::getValue('MINORDER_COLOR_BUTTON_TEXT'), '#ffffff');
 
             Configuration::updateValue('MINORDER_COLOR_PRIMARY', $colorPrimary);
             Configuration::updateValue('MINORDER_COLOR_SECONDARY', $colorSecondary);
@@ -427,49 +428,66 @@ class MinOrderTaxIncluded extends Module
 
     /**
      * Add CSS and JS to header
+     * Uses inline script instead of deprecated Media::addJsDef for PS 8.x compatibility
      */
     public function hookDisplayHeader()
     {
         $this->context->controller->addCSS($this->_path . 'views/css/minordertaxincluded.css');
         $this->context->controller->addJS($this->_path . 'views/js/minordertaxincluded.js');
 
-        // Pass configuration to JavaScript, including current page info
-        $controller = Tools::getValue('controller');
-        // Get currency sign safely
+        // Pass configuration to JavaScript via inline script (PS 8.x compatible)
+        $controller = (string) Tools::getValue('controller');
         $currencySign = '€';
         if (isset($this->context->currency) && isset($this->context->currency->sign)) {
             $currencySign = $this->context->currency->sign;
         }
 
-        Media::addJsDef([
+        // Build JavaScript configuration (sanitized for XSS prevention)
+        $jsConfig = [
             'minorder_ajax_url' => $this->context->link->getModuleLink($this->name, 'ajax'),
             'minorder_free_shipping' => (float) Configuration::get('MINORDER_FREE_SHIPPING_AMOUNT'),
             'minorder_min_order' => (float) Configuration::get('MINORDER_MIN_ORDER_AMOUNT'),
             'minorder_currency_sign' => $currencySign,
             'minorder_cart_total' => (float) $this->getCartTotalTaxIncluded(),
-            'minorder_current_controller' => (string) $controller,
-        ]);
+            'minorder_current_controller' => $controller,
+        ];
 
-        // Add dynamic color CSS
-        return $this->generateDynamicCSS();
+        // Output as inline script (works in PS 1.7 and 8.x)
+        $inlineScript = '<script type="text/javascript">';
+        foreach ($jsConfig as $key => $value) {
+            if (is_string($value)) {
+                // Escape string values for JavaScript
+                $escapedValue = json_encode($value, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+                $inlineScript .= 'var ' . $key . ' = ' . $escapedValue . ';';
+            } else {
+                // Numeric values
+                $inlineScript .= 'var ' . $key . ' = ' . (float) $value . ';';
+            }
+        }
+        $inlineScript .= '</script>';
+
+        // Add dynamic color CSS + inline script
+        return $inlineScript . $this->generateDynamicCSS();
     }
 
     /**
      * Generate dynamic CSS based on color configuration
+     * All colors are validated to prevent XSS injection
      */
     protected function generateDynamicCSS()
     {
-        $colorPrimary = Configuration::get('MINORDER_COLOR_PRIMARY') ?: '#28a745';
-        $colorSecondary = Configuration::get('MINORDER_COLOR_SECONDARY') ?: '#ff6b35';
-        $colorWarning = Configuration::get('MINORDER_COLOR_WARNING') ?: '#ffc107';
-        $colorProgressBg = Configuration::get('MINORDER_COLOR_PROGRESS_BG') ?: '#e9ecef';
-        $colorButton = Configuration::get('MINORDER_COLOR_BUTTON') ?: '#28a745';
-        $colorButtonText = Configuration::get('MINORDER_COLOR_BUTTON_TEXT') ?: '#ffffff';
-        $colorBestseller = Configuration::get('MINORDER_COLOR_BESTSELLER') ?: '#dc3545';
-        $colorPriceOld = Configuration::get('MINORDER_COLOR_PRICE_OLD') ?: '#999999';
-        $colorText = Configuration::get('MINORDER_COLOR_TEXT') ?: '#333333';
-        $colorCardBg = Configuration::get('MINORDER_COLOR_CARD_BG') ?: '#ffffff';
-        $colorCardBorder = Configuration::get('MINORDER_COLOR_CARD_BORDER') ?: '#eeeeee';
+        // Sanitize all colors from configuration to prevent XSS
+        $colorPrimary = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_PRIMARY'), '#28a745');
+        $colorSecondary = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_SECONDARY'), '#ff6b35');
+        $colorWarning = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_WARNING'), '#ffc107');
+        $colorProgressBg = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_PROGRESS_BG'), '#e9ecef');
+        $colorButton = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_BUTTON'), '#28a745');
+        $colorButtonText = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_BUTTON_TEXT'), '#ffffff');
+        $colorBestseller = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_BESTSELLER'), '#dc3545');
+        $colorPriceOld = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_PRICE_OLD'), '#999999');
+        $colorText = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_TEXT'), '#333333');
+        $colorCardBg = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_CARD_BG'), '#ffffff');
+        $colorCardBorder = $this->sanitizeHexColor(Configuration::get('MINORDER_COLOR_CARD_BORDER'), '#eeeeee');
 
         // Calculate darker shade for hover
         $colorButtonHover = $this->adjustBrightness($colorButton, -20);
@@ -601,6 +619,35 @@ class MinOrderTaxIncluded extends Module
         $b = max(0, min(255, $b + ($b * $percent / 100)));
 
         return sprintf('#%02x%02x%02x', $r, $g, $b);
+    }
+
+    /**
+     * Sanitize and validate hex color value to prevent XSS
+     * Returns default if invalid
+     *
+     * @param string $color The color value to sanitize
+     * @param string $default The default color if invalid
+     * @return string Sanitized hex color
+     */
+    protected function sanitizeHexColor($color, $default = '#000000')
+    {
+        // Ensure it's a string
+        $color = (string) $color;
+
+        // Remove any whitespace
+        $color = trim($color);
+
+        // Must start with #
+        if (empty($color) || $color[0] !== '#') {
+            return $default;
+        }
+
+        // Validate hex format: #RGB or #RRGGBB
+        if (preg_match('/^#[0-9a-fA-F]{3}$/', $color) || preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+            return strtolower($color);
+        }
+
+        return $default;
     }
 
     /**
@@ -952,6 +999,7 @@ class MinOrderTaxIncluded extends Module
     /**
      * Get suggested products to reach minimum order
      * Uses smart logic: products bought together + bestsellers, sorted by price proximity
+     * Optimized with bulk queries to avoid N+1 problem
      */
     public function getSuggestedProducts($remainingAmount = null)
     {
@@ -971,7 +1019,8 @@ class MinOrderTaxIncluded extends Module
         }
 
         $cart = $this->context->cart;
-        $idLang = $this->context->language->id;
+        $idLang = (int) $this->context->language->id;
+        $idShop = (int) $this->context->shop->id;
         $useTaxIncl = (bool) Configuration::get('MINORDER_USE_TAX_INCL');
 
         // Get product IDs already in cart to exclude them
@@ -1007,70 +1056,132 @@ class MinOrderTaxIncluded extends Module
         // Get bestseller IDs to mark them
         $bestsellerProductIds = $this->getBestsellerProductIds($count * 3, $cartProductIds);
 
-        // Step 4: Build product data with prices
-        $suggestedProducts = [];
-        foreach ($relatedProductIds as $productId) {
-            $product = new Product((int) $productId, true, $idLang);
+        // Step 4: BULK QUERY - Get all product data in one query (Performance optimization)
+        $productData = $this->getProductDataBulk($relatedProductIds, $idLang, $idShop);
 
+        if (empty($productData)) {
+            return [];
+        }
+
+        // Step 5: Build product array with prices
+        $suggestedProducts = [];
+        foreach ($productData as $data) {
+            $productId = (int) $data['id_product'];
+
+            // Get prices using Product class (needed for tax calculations)
+            $product = new Product($productId, false, $idLang);
             if (!Validate::isLoadedObject($product)) {
                 continue;
             }
 
-            // Get current price (with any discount applied)
             $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
-
-            // Skip if price is 0
             if ($price <= 0) {
                 continue;
             }
 
-            // Get regular price (without discount)
             $regularPrice = $useTaxIncl
                 ? $product->getPrice(true, null, 6, null, false, false)
                 : $product->getPrice(false, null, 6, null, false, false);
 
-            // Check if product has a discount
             $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
-
-            // Check if product is a bestseller
             $isBestseller = in_array($productId, $bestsellerProductIds);
 
-            $cover = Product::getCover($product->id);
+            // Build image URL from bulk data
             $imageUrl = '';
-            if ($cover) {
-                // PS 8.x compatibility: getFormattedName is deprecated
+            if (!empty($data['id_image'])) {
                 $imageType = $this->getImageTypeName('home');
                 $imageUrl = $this->context->link->getImageLink(
-                    $product->link_rewrite,
-                    $cover['id_image'],
+                    $data['link_rewrite'],
+                    $data['id_image'],
                     $imageType
                 );
             }
 
             $suggestedProducts[] = [
-                'id_product' => $product->id,
-                'name' => $product->name,
+                'id_product' => $productId,
+                'name' => $data['name'],
                 'price' => $price,
                 'price_formatted' => Tools::displayPrice($price),
                 'regular_price' => $regularPrice,
                 'regular_price_formatted' => Tools::displayPrice($regularPrice),
                 'has_discount' => $hasDiscount,
                 'is_bestseller' => $isBestseller,
-                'link' => $this->context->link->getProductLink($product),
+                'link' => $this->context->link->getProductLink($productId),
                 'image_url' => $imageUrl,
-                'description_short' => strip_tags((string) $product->description_short),
+                'description_short' => strip_tags((string) $data['description_short']),
                 'reaches_minimum' => ($price >= $remainingAmount),
                 'price_distance' => abs($price - $remainingAmount),
             ];
+
+            // Stop if we have enough products
+            if (count($suggestedProducts) >= $count) {
+                break;
+            }
         }
 
-        // Step 5: Sort by price proximity to remaining amount (closest first)
+        // Step 6: Sort by price proximity to remaining amount (closest first)
         usort($suggestedProducts, function ($a, $b) {
             return $a['price_distance'] <=> $b['price_distance'];
         });
 
         // Return only the requested count
         return array_slice($suggestedProducts, 0, $count);
+    }
+
+    /**
+     * Get product data in bulk (single SQL query)
+     * This fixes the N+1 query problem by fetching all data at once
+     *
+     * @param array $productIds Array of product IDs
+     * @param int $idLang Language ID
+     * @param int $idShop Shop ID
+     * @return array Product data with names, images, descriptions
+     */
+    protected function getProductDataBulk($productIds, $idLang, $idShop)
+    {
+        if (empty($productIds)) {
+            return [];
+        }
+
+        // Sanitize product IDs
+        $productIds = array_map('intval', $productIds);
+        $productIdsStr = implode(',', $productIds);
+
+        // Single query to get all product data with cover images
+        $sql = 'SELECT
+                    p.id_product,
+                    pl.name,
+                    pl.link_rewrite,
+                    pl.description_short,
+                    COALESCE(img.id_image, 0) as id_image
+                FROM `' . _DB_PREFIX_ . 'product` p
+                INNER JOIN `' . _DB_PREFIX_ . 'product_lang` pl
+                    ON pl.id_product = p.id_product
+                    AND pl.id_lang = ' . (int) $idLang . '
+                    AND pl.id_shop = ' . (int) $idShop . '
+                INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps
+                    ON ps.id_product = p.id_product
+                    AND ps.id_shop = ' . (int) $idShop . '
+                LEFT JOIN `' . _DB_PREFIX_ . 'image` img
+                    ON img.id_product = p.id_product
+                    AND img.cover = 1
+                WHERE p.id_product IN (' . $productIdsStr . ')
+                AND ps.active = 1
+                ORDER BY FIELD(p.id_product, ' . $productIdsStr . ')';
+
+        try {
+            $results = Db::getInstance()->executeS($sql);
+            return is_array($results) ? $results : [];
+        } catch (Exception $e) {
+            PrestaShopLogger::addLog(
+                'MinOrderTaxIncluded getProductDataBulk error: ' . $e->getMessage(),
+                2,
+                null,
+                'Module',
+                null
+            );
+            return [];
+        }
     }
 
     /**
