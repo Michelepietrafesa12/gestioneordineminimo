@@ -698,6 +698,8 @@
          * Update checkout button state
          */
         updateCheckoutButton: function(disabled) {
+            var self = this;
+
             // Only block buttons on cart-related pages, not on account pages
             var currentController = typeof minorder_current_controller !== 'undefined' ? minorder_current_controller : '';
             var allowedControllers = ['cart', 'order', 'orderopc', 'checkout'];
@@ -707,47 +709,143 @@
                 return;
             }
 
-            var checkoutButtons = document.querySelectorAll(
-                '.checkout a, ' +
-                '.cart-detailed-actions a.btn, ' +
-                '.cart-grid-right a.btn-primary, ' +
-                '.checkout-button'
-            );
+            // Extended selectors to catch all possible checkout buttons
+            var checkoutSelectors = [
+                '.checkout a',
+                '.cart-detailed-actions a.btn',
+                '.cart-detailed-actions a',
+                '.cart-detailed-actions button',
+                '.cart-grid-right a.btn-primary',
+                '.cart-grid-right a.btn',
+                '.cart-summary a.btn',
+                '.cart-summary a.btn-primary',
+                '.checkout-button',
+                'a.checkout',
+                'a[href*="order"]',
+                'a[href*="checkout"]',
+                'button[type="submit"]',
+                '.btn-checkout',
+                '#checkout-btn',
+                '.proceed-to-checkout',
+                '[data-link-action="show-login-form"]'
+            ];
+
+            var checkoutButtons = document.querySelectorAll(checkoutSelectors.join(', '));
 
             for (var i = 0; i < checkoutButtons.length; i++) {
                 var btn = checkoutButtons[i];
+
                 // Skip buttons inside modals - handled separately
                 if (btn.closest('.modal')) continue;
 
                 // Skip links to order history/details (account area)
                 var href = btn.getAttribute('href') || '';
-                if (href.indexOf('order-detail') !== -1 || href.indexOf('history') !== -1) {
+                if (href.indexOf('order-detail') !== -1 ||
+                    href.indexOf('history') !== -1 ||
+                    href.indexOf('my-account') !== -1 ||
+                    href.indexOf('identity') !== -1 ||
+                    href.indexOf('addresses') !== -1) {
+                    continue;
+                }
+
+                // Skip "Continua lo shopping" type links
+                if (href.indexOf('carrello') === -1 &&
+                    href.indexOf('order') === -1 &&
+                    href.indexOf('checkout') === -1 &&
+                    !btn.textContent.toLowerCase().includes('checkout') &&
+                    !btn.textContent.toLowerCase().includes('procedi') &&
+                    !btn.textContent.toLowerCase().includes('ordine')) {
                     continue;
                 }
 
                 if (disabled) {
+                    // Mark as blocked
                     btn.classList.add('disabled', 'minorder-blocked');
-                    btn.style.pointerEvents = 'none';
-                    btn.style.opacity = '0.5';
-                    if (!btn.getAttribute('data-original-href')) {
+                    btn.setAttribute('data-minorder-blocked', 'true');
+
+                    // Save original state
+                    if (!btn.getAttribute('data-original-href') && href) {
                         btn.setAttribute('data-original-href', href);
                     }
-                    btn.setAttribute('href', 'javascript:void(0);');
+
+                    // Visual blocking
+                    btn.style.pointerEvents = 'none';
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                    btn.style.position = 'relative';
+
+                    // Remove href for links
+                    if (btn.tagName === 'A') {
+                        btn.setAttribute('href', 'javascript:void(0);');
+                        btn.removeAttribute('target');
+                    }
+
+                    // Disable for buttons
+                    if (btn.tagName === 'BUTTON') {
+                        btn.disabled = true;
+                    }
+
+                    // Block click events
                     btn.onclick = function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        alert('Ordine minimo non raggiunto (' + self.formatCurrency(self.minOrderAmount) + '). Aggiungi altri prodotti al carrello.');
+                        return false;
+                    };
+
+                    // Add click listener that captures
+                    btn.addEventListener('click', self.blockCheckoutHandler, true);
+
+                } else {
+                    // Unblock
+                    btn.classList.remove('disabled', 'minorder-blocked');
+                    btn.removeAttribute('data-minorder-blocked');
+
+                    // Restore visual state
+                    btn.style.pointerEvents = '';
+                    btn.style.opacity = '';
+                    btn.style.cursor = '';
+
+                    // Restore href
+                    var originalHref = btn.getAttribute('data-original-href');
+                    if (originalHref && btn.tagName === 'A') {
+                        btn.setAttribute('href', originalHref);
+                    }
+
+                    // Enable buttons
+                    if (btn.tagName === 'BUTTON') {
+                        btn.disabled = false;
+                    }
+
+                    // Remove click handlers
+                    btn.onclick = null;
+                    btn.removeEventListener('click', self.blockCheckoutHandler, true);
+                }
+            }
+
+            // Also block any forms that submit to checkout
+            if (disabled) {
+                var checkoutForms = document.querySelectorAll('form[action*="order"], form[action*="checkout"]');
+                for (var j = 0; j < checkoutForms.length; j++) {
+                    checkoutForms[j].onsubmit = function(e) {
                         e.preventDefault();
                         alert('Ordine minimo non raggiunto. Aggiungi altri prodotti al carrello.');
                         return false;
                     };
-                } else {
-                    btn.classList.remove('disabled', 'minorder-blocked');
-                    btn.style.pointerEvents = '';
-                    btn.style.opacity = '';
-                    var originalHref = btn.getAttribute('data-original-href');
-                    if (originalHref) {
-                        btn.setAttribute('href', originalHref);
-                    }
-                    btn.onclick = null;
                 }
+            }
+        },
+
+        /**
+         * Handler to block checkout clicks
+         */
+        blockCheckoutHandler: function(e) {
+            if (e.currentTarget.getAttribute('data-minorder-blocked') === 'true') {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return false;
             }
         },
 
