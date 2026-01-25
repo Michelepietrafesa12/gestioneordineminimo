@@ -138,14 +138,22 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
 
         // Get suggested products if minimum not reached
         $suggestedProducts = [];
-        if (!$minOrderReached && $showSuggested && $this->module) {
-            try {
-                $suggestedProducts = $this->module->getSuggestedProducts($remaining);
-                if (!is_array($suggestedProducts)) {
+        if (!$minOrderReached && $showSuggested) {
+            // Try to get from module
+            if ($this->module && method_exists($this->module, 'getSuggestedProducts')) {
+                try {
+                    $suggestedProducts = $this->module->getSuggestedProducts($remaining);
+                    if (!is_array($suggestedProducts)) {
+                        $suggestedProducts = [];
+                    }
+                } catch (Exception $e) {
                     $suggestedProducts = [];
                 }
-            } catch (Exception $e) {
-                $suggestedProducts = [];
+            }
+
+            // Fallback: get suggested products directly
+            if (empty($suggestedProducts)) {
+                $suggestedProducts = $this->getSuggestedProductsFallback($remaining, $cart, $useTaxIncl);
             }
         }
 
@@ -181,5 +189,155 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
             'min_order_reached' => $minOrderReached,
             'min_order_remaining' => round($remaining, 2),
         ]));
+    }
+
+    /**
+     * Fallback method to get suggested products directly in AJAX controller
+     */
+    protected function getSuggestedProductsFallback($remaining, $cart, $useTaxIncl)
+    {
+        $idLang = $this->context->language->id;
+        $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
+        $count = max(1, min(8, $count ?: 4));
+
+        // Get cart product IDs to exclude
+        $cartProductIds = [];
+        if (Validate::isLoadedObject($cart)) {
+            $cartProducts = $cart->getProducts();
+            foreach ($cartProducts as $product) {
+                $cartProductIds[] = (int) $product['id_product'];
+            }
+        }
+
+        // Get bestseller product IDs
+        $excludeIds = implode(',', array_map('intval', array_merge([0], $cartProductIds)));
+
+        $sql = new DbQuery();
+        $sql->select('DISTINCT od.product_id as id_product');
+        $sql->from('order_detail', 'od');
+        $sql->innerJoin('orders', 'o', 'o.id_order = od.id_order');
+        $sql->innerJoin('product_shop', 'ps', 'ps.id_product = od.product_id AND ps.id_shop = ' . (int) $this->context->shop->id);
+        $sql->where('o.valid = 1');
+        $sql->where('ps.active = 1');
+        $sql->where('od.product_id NOT IN (' . $excludeIds . ')');
+        $sql->groupBy('od.product_id');
+        $sql->orderBy('SUM(od.product_quantity) DESC');
+        $sql->limit($count * 2);
+
+        $results = Db::getInstance()->executeS($sql);
+        $productIds = [];
+        if ($results) {
+            foreach ($results as $row) {
+                $productIds[] = (int) $row['id_product'];
+            }
+        }
+
+        // If no bestsellers, get newest products
+        if (empty($productIds)) {
+            $sql = new DbQuery();
+            $sql->select('p.id_product');
+            $sql->from('product', 'p');
+            $sql->innerJoin('product_shop', 'ps', 'ps.id_product = p.id_product AND ps.id_shop = ' . (int) $this->context->shop->id);
+            $sql->where('ps.active = 1');
+            $sql->where('p.id_product NOT IN (' . $excludeIds . ')');
+            $sql->orderBy('p.date_add DESC');
+            $sql->limit($count);
+
+            $results = Db::getInstance()->executeS($sql);
+            if ($results) {
+                foreach ($results as $row) {
+                    $productIds[] = (int) $row['id_product'];
+                }
+            }
+        }
+
+        // Build product data
+        $suggestedProducts = [];
+        foreach ($productIds as $productId) {
+            if (count($suggestedProducts) >= $count) {
+                break;
+            }
+
+            $product = new Product((int) $productId, true, $idLang);
+            if (!Validate::isLoadedObject($product)) {
+                continue;
+            }
+
+            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
+            if ($price <= 0) {
+                continue;
+            }
+
+            $regularPrice = $useTaxIncl
+                ? $product->getPrice(true, null, 6, null, false, false)
+                : $product->getPrice(false, null, 6, null, false, false);
+
+            $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
+
+            $cover = Product::getCover($product->id);
+            $imageUrl = '';
+            if ($cover) {
+                $imageType = $this->getImageTypeFallback();
+                $imageUrl = $this->context->link->getImageLink(
+                    (string) $product->link_rewrite,
+                    $cover['id_image'],
+                    $imageType
+                );
+            }
+
+            $suggestedProducts[] = [
+                'id_product' => $product->id,
+                'name' => $product->name,
+                'price' => $price,
+                'price_formatted' => Tools::displayPrice($price),
+                'regular_price' => $regularPrice,
+                'regular_price_formatted' => Tools::displayPrice($regularPrice),
+                'has_discount' => $hasDiscount,
+                'link' => $this->context->link->getProductLink($product),
+                'image_url' => $imageUrl,
+                'reaches_minimum' => ($price >= $remaining),
+                'is_bestseller' => true,
+            ];
+        }
+
+        return $suggestedProducts;
+    }
+
+    /**
+     * Get image type name (PS 8.x compatible)
+     */
+    protected function getImageTypeFallback()
+    {
+        // For PS 8.x, query database
+        if (version_compare(_PS_VERSION_, '8.0.0', '>=')) {
+            $sql = new DbQuery();
+            $sql->select('name');
+            $sql->from('image_type');
+            $sql->where('name LIKE \'%home%\'');
+            $sql->limit(1);
+
+            $result = Db::getInstance()->getValue($sql);
+            if ($result) {
+                return (string) $result;
+            }
+
+            // Try getting any small image type
+            $sql = new DbQuery();
+            $sql->select('name');
+            $sql->from('image_type');
+            $sql->where('width <= 300');
+            $sql->orderBy('width DESC');
+            $sql->limit(1);
+
+            $result = Db::getInstance()->getValue($sql);
+            return $result ? (string) $result : 'home_default';
+        }
+
+        // For PS 1.7.x use ImageType class
+        if (class_exists('ImageType') && method_exists('ImageType', 'getFormattedName')) {
+            return ImageType::getFormattedName('home');
+        }
+
+        return 'home_default';
     }
 }
