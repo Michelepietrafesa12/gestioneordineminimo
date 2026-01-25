@@ -596,22 +596,19 @@ class MinOrderTaxIncluded extends Module
     }
 
     /**
-     * Display progress bar in shopping cart page (main content area only)
+     * Display progress bar in shopping cart page (footer)
      */
     public function hookDisplayShoppingCartFooter($params)
     {
-        // Show unified progress bar for minimum order
-        return $this->renderMinOrderProgressBar();
+        return $this->renderMinOrderProgressBarOnce();
     }
 
     /**
-     * Display progress bar in displayShoppingCart hook
-     * Return empty to avoid duplicates - we only show in footer
+     * Display progress bar in shopping cart (main hook)
      */
     public function hookDisplayShoppingCart($params)
     {
-        // Return empty to avoid duplicate display
-        return '';
+        return $this->renderMinOrderProgressBarOnce();
     }
 
     /**
@@ -619,6 +616,19 @@ class MinOrderTaxIncluded extends Module
      */
     public function hookDisplayCrossSellingShoppingCart($params)
     {
+        return $this->renderMinOrderProgressBarOnce();
+    }
+
+    /**
+     * Render progress bar only once (prevents duplicates from multiple hooks)
+     */
+    protected function renderMinOrderProgressBarOnce()
+    {
+        static $rendered = false;
+        if ($rendered) {
+            return '';
+        }
+        $rendered = true;
         return $this->renderMinOrderProgressBar();
     }
 
