@@ -719,7 +719,15 @@ class MinOrderTaxIncluded extends Module
                 'show_suggested' => (bool) ($showSuggested && !empty($suggestedProducts)),
             ]);
 
-            return $this->display(__FILE__, 'views/templates/hook/min_order_progress.tpl');
+            $templatePath = 'views/templates/hook/min_order_progress.tpl';
+            $output = $this->display(__FILE__, $templatePath);
+
+            // DEBUG: Check if template rendered
+            if (empty($output)) {
+                return '<div style="background:orange;color:black;padding:10px;">DEBUG: Template returned empty. Path: ' . $this->getLocalPath() . $templatePath . '</div>';
+            }
+
+            return $output;
         } catch (Exception $e) {
             // Log error and return empty to prevent breaking the page
             PrestaShopLogger::addLog(
