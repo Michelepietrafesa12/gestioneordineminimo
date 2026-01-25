@@ -259,146 +259,142 @@ class MinOrderTaxIncludedAjaxModuleFrontController extends ModuleFrontController
      */
     protected function getSuggestedProductsFallback($remaining, $cart, $useTaxIncl)
     {
-        $idLang = (int) $this->context->language->id;
-        $idShop = (int) $this->context->shop->id;
-        $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
-        $count = max(1, min(8, $count ?: 4));
+        try {
+            $idLang = (int) $this->context->language->id;
+            $idShop = (int) $this->context->shop->id;
+            $count = (int) Configuration::get('MINORDER_SUGGESTED_COUNT');
+            $count = max(1, min(8, $count ?: 4));
+            $limit = (int) ($count * 2);
 
-        // Get cart product IDs to exclude
-        $cartProductIds = [0]; // Start with 0 to avoid empty IN clause
-        if (Validate::isLoadedObject($cart)) {
-            $cartProducts = $cart->getProducts();
-            foreach ($cartProducts as $product) {
-                $cartProductIds[] = (int) $product['id_product'];
-            }
-        }
-        $excludeIds = implode(',', $cartProductIds);
-
-        // Get bestseller product IDs using raw SQL
-        $sql = 'SELECT DISTINCT od.product_id as id_product
-                FROM `' . _DB_PREFIX_ . 'order_detail` od
-                INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
-                INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = od.product_id AND ps.id_shop = ' . $idShop . '
-                WHERE o.valid = 1
-                AND ps.active = 1
-                AND od.product_id NOT IN (' . $excludeIds . ')
-                GROUP BY od.product_id
-                ORDER BY SUM(od.product_quantity) DESC
-                LIMIT ' . ($count * 2);
-
-        $results = Db::getInstance()->executeS($sql);
-        $productIds = [];
-        if ($results && is_array($results)) {
-            foreach ($results as $row) {
-                $productIds[] = (int) $row['id_product'];
-            }
-        }
-
-        // If no bestsellers, get newest products
-        if (empty($productIds)) {
-            $sql = 'SELECT p.id_product
-                    FROM `' . _DB_PREFIX_ . 'product` p
-                    INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = p.id_product AND ps.id_shop = ' . $idShop . '
-                    WHERE ps.active = 1
-                    AND p.id_product NOT IN (' . $excludeIds . ')
-                    ORDER BY p.date_add DESC
-                    LIMIT ' . $count;
-
-            $results = Db::getInstance()->executeS($sql);
-            if ($results && is_array($results)) {
-                foreach ($results as $row) {
-                    $productIds[] = (int) $row['id_product'];
+            // Get cart product IDs to exclude
+            $cartProductIds = [0]; // Start with 0 to avoid empty IN clause
+            if (Validate::isLoadedObject($cart)) {
+                $cartProducts = $cart->getProducts();
+                if (is_array($cartProducts)) {
+                    foreach ($cartProducts as $product) {
+                        $cartProductIds[] = (int) $product['id_product'];
+                    }
                 }
             }
+            $excludeIds = implode(',', $cartProductIds);
+
+            // Get bestseller product IDs using raw SQL
+            $productIds = [];
+
+            try {
+                $sql = 'SELECT DISTINCT od.product_id as id_product
+                        FROM `' . _DB_PREFIX_ . 'order_detail` od
+                        INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
+                        INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = od.product_id AND ps.id_shop = ' . $idShop . '
+                        WHERE o.valid = 1
+                        AND ps.active = 1
+                        AND od.product_id NOT IN (' . $excludeIds . ')
+                        GROUP BY od.product_id
+                        ORDER BY SUM(od.product_quantity) DESC
+                        LIMIT ' . $limit;
+
+                $results = Db::getInstance()->executeS($sql);
+                if ($results && is_array($results)) {
+                    foreach ($results as $row) {
+                        $productIds[] = (int) $row['id_product'];
+                    }
+                }
+            } catch (Exception $e) {
+                // Ignore bestseller query error
+            }
+
+            // If no bestsellers, get newest products
+            if (empty($productIds)) {
+                try {
+                    $sql = 'SELECT p.id_product
+                            FROM `' . _DB_PREFIX_ . 'product` p
+                            INNER JOIN `' . _DB_PREFIX_ . 'product_shop` ps ON ps.id_product = p.id_product AND ps.id_shop = ' . $idShop . '
+                            WHERE ps.active = 1
+                            AND p.id_product NOT IN (' . $excludeIds . ')
+                            ORDER BY p.date_add DESC
+                            LIMIT ' . $count;
+
+                    $results = Db::getInstance()->executeS($sql);
+                    if ($results && is_array($results)) {
+                        foreach ($results as $row) {
+                            $productIds[] = (int) $row['id_product'];
+                        }
+                    }
+                } catch (Exception $e) {
+                    // Ignore newest products query error
+                }
+            }
+
+            // Build product data
+            $suggestedProducts = [];
+            foreach ($productIds as $productId) {
+                if (count($suggestedProducts) >= $count) {
+                    break;
+                }
+
+                try {
+                    $product = new Product((int) $productId, true, $idLang);
+                    if (!Validate::isLoadedObject($product)) {
+                        continue;
+                    }
+
+                    $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
+                    if ($price <= 0) {
+                        continue;
+                    }
+
+                    $regularPrice = $useTaxIncl
+                        ? $product->getPrice(true, null, 6, null, false, false)
+                        : $product->getPrice(false, null, 6, null, false, false);
+
+                    $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
+
+                    // Get image URL without SQL query - use default type
+                    $imageUrl = '';
+                    $cover = Product::getCover($product->id);
+                    if ($cover && isset($cover['id_image'])) {
+                        $imageUrl = $this->context->link->getImageLink(
+                            (string) $product->link_rewrite,
+                            $cover['id_image'],
+                            'home_default'
+                        );
+                    }
+
+                    $suggestedProducts[] = [
+                        'id_product' => $product->id,
+                        'name' => $product->name,
+                        'price' => $price,
+                        'price_formatted' => Tools::displayPrice($price),
+                        'regular_price' => $regularPrice,
+                        'regular_price_formatted' => Tools::displayPrice($regularPrice),
+                        'has_discount' => $hasDiscount,
+                        'link' => $this->context->link->getProductLink($product),
+                        'image_url' => $imageUrl,
+                        'reaches_minimum' => ($price >= $remaining),
+                        'is_bestseller' => true,
+                    ];
+                } catch (Exception $e) {
+                    // Skip this product if any error
+                    continue;
+                }
+            }
+
+            return $suggestedProducts;
+
+        } catch (Exception $e) {
+            // If anything fails, return empty array
+            return [];
         }
-
-        // Build product data
-        $suggestedProducts = [];
-        foreach ($productIds as $productId) {
-            if (count($suggestedProducts) >= $count) {
-                break;
-            }
-
-            $product = new Product((int) $productId, true, $idLang);
-            if (!Validate::isLoadedObject($product)) {
-                continue;
-            }
-
-            $price = $useTaxIncl ? $product->getPrice(true) : $product->getPrice(false);
-            if ($price <= 0) {
-                continue;
-            }
-
-            $regularPrice = $useTaxIncl
-                ? $product->getPrice(true, null, 6, null, false, false)
-                : $product->getPrice(false, null, 6, null, false, false);
-
-            $hasDiscount = ($regularPrice > $price && ($regularPrice - $price) > 0.01);
-
-            $cover = Product::getCover($product->id);
-            $imageUrl = '';
-            if ($cover) {
-                $imageType = $this->getImageTypeFallback();
-                $imageUrl = $this->context->link->getImageLink(
-                    (string) $product->link_rewrite,
-                    $cover['id_image'],
-                    $imageType
-                );
-            }
-
-            $suggestedProducts[] = [
-                'id_product' => $product->id,
-                'name' => $product->name,
-                'price' => $price,
-                'price_formatted' => Tools::displayPrice($price),
-                'regular_price' => $regularPrice,
-                'regular_price_formatted' => Tools::displayPrice($regularPrice),
-                'has_discount' => $hasDiscount,
-                'link' => $this->context->link->getProductLink($product),
-                'image_url' => $imageUrl,
-                'reaches_minimum' => ($price >= $remaining),
-                'is_bestseller' => true,
-            ];
-        }
-
-        return $suggestedProducts;
     }
 
     /**
-     * Get image type name (PS 8.x compatible)
+     * Get image type name
+     * Returns hardcoded default to avoid any SQL issues
      */
     protected function getImageTypeFallback()
     {
-        // For PS 8.x, query database using raw SQL
-        if (version_compare(_PS_VERSION_, '8.0.0', '>=')) {
-            // Try to find 'home' image type
-            $result = Db::getInstance()->getValue(
-                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` WHERE name LIKE "%home%" LIMIT 1'
-            );
-            if ($result) {
-                return (string) $result;
-            }
-
-            // Try getting any small image type
-            $result = Db::getInstance()->getValue(
-                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` WHERE width <= 300 ORDER BY width DESC LIMIT 1'
-            );
-            if ($result) {
-                return (string) $result;
-            }
-
-            // Last resort: get any image type
-            $result = Db::getInstance()->getValue(
-                'SELECT name FROM `' . _DB_PREFIX_ . 'image_type` LIMIT 1'
-            );
-            return $result ? (string) $result : 'home_default';
-        }
-
-        // For PS 1.7.x use ImageType class
-        if (class_exists('ImageType') && method_exists('ImageType', 'getFormattedName')) {
-            return ImageType::getFormattedName('home');
-        }
-
+        // Simply return home_default - it's the standard PrestaShop image type
+        // This avoids any SQL queries that could cause issues
         return 'home_default';
     }
 }
